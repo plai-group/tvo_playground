@@ -1,0 +1,15 @@
+{
+  "name": "brooks",
+  "_info": "PCFG from the GrammarVAE paper",
+  "terminals": ["x", "sin(", "exp(", "(", ")", "+", "*", "/", "1", "2", "3"],
+  "non_terminals": ["S", "T"],
+  "productions": {
+    "S": [["S", "+", "T"], ["S", "*", "T"], ["S", "/", "T"], ["T"]],
+    "T": [["(", "S", ")"], ["sin(", "S", ")"], ["exp(", "S", ")"], ["x"], ["1"], ["2"], ["3"]]
+  },
+  "start_symbol": "S",
+  "production_probs": {
+    "S": [0.3, 0.3, 0.3, 0.1],
+    "T": [0.01, 0.02, 0.01, 0.24, 0.24, 0.24, 0.24]
+  }
+}

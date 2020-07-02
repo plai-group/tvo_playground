@@ -1,0 +1,22 @@
+{
+  "name": "astronomers",
+  "terminals": ["astronomers", "ears", "saw", "stars", "telescopes", "with"],
+  "non_terminals": ["S", "NP", "VP", "PP", "P", "V"],
+  "productions": {
+    "S": [["NP", "VP"]],
+    "NP": [["NP", "PP"], ["astronomers"], ["ears"], ["saw"], ["stars"], ["telescopes"]],
+    "VP": [["V", "NP"], ["VP", "PP"]],
+    "PP": [["P", "NP"]],
+    "P": [["with"]],
+    "V": [["saw"]]
+  },
+  "start_symbol": "S",
+  "production_probs": {
+    "S": [1.0],
+    "NP": [0.4, 0.1, 0.18, 0.04, 0.18, 0.1],
+    "VP": [0.7, 0.3],
+    "PP": [1.0],
+    "P": [1.0],
+    "V": [1.0]
+  }
+}
