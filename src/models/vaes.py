@@ -36,6 +36,8 @@ class VAEBaseClass(ProbModelBaseClass):
         self.inf_network = None
         self.stop_grads = False
 
+        self.activation = nn.Tanh()
+
     # ======== Model methods ========
 
     def get_decoder_latent_layer_param(self, layer_idx, previous_latent_layer=None):
@@ -379,20 +381,20 @@ class ContinuousVAE(VAEBaseClass):
                                                        out_dim=self.latent_dims[i],
                                                        hidden_dim=self.hidden_dim,
                                                        num_layers=self.num_deterministic_layers,
-                                                       non_linearity=nn.Tanh() if self.args.activation is None else self.args.activation)
+                                                       non_linearity=self.activation)
 
         # This is the mlp from discrete.py that doesn't produce a sigma
         self.decoder_to_obs = init_mlp(in_dim=self.latent_dims[-1],
                                        out_dim=self.D,
                                        hidden_dim=self.hidden_dim,
                                        num_layers=self.num_deterministic_layers,
-                                       non_linearity=nn.Tanh() if self.args.activation is None else self.args.activation)
+                                       non_linearity=self.activation)
 
         self.encoder_to_obs = init_two_prong_mlp(in_dim=self.D,
                                                  out_dim=self.latent_dims[-1],
                                                  hidden_dim=self.hidden_dim,
                                                  num_layers=self.num_deterministic_layers,
-                                                 non_linearity=nn.Tanh() if self.args.activation is None else self.args.activation)
+                                                 non_linearity=self.activation)
 
         self.encoders = nn.ModuleDict()
         for i in reversed(range(self.num_stochastic_layers - 1)):
@@ -400,7 +402,7 @@ class ContinuousVAE(VAEBaseClass):
                                                        out_dim=self.latent_dims[i],
                                                        hidden_dim=self.hidden_dim,
                                                        num_layers=self.num_deterministic_layers,
-                                                       non_linearity=nn.Tanh() if self.args.activation is None else self.args.activation)
+                                                       non_linearity=self.activation)
 
 
 class DiscreteVAE(VAEBaseClass):

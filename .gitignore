@@ -4,8 +4,8 @@
 logs/*
 notebooks/.ipynb_checkpoints/
 archive/
-discrete_vi/
-bkup/
+artifacts/
+wandb/
 results/
 .vscode
 # Byte-compiled / optimized / DLL files

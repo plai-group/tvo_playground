@@ -60,7 +60,7 @@ class Synthetic(Dataset):
 
 def make_continuous_vae_data(args):
     # read data
-    with args._run.open_resource(args.data_path, 'rb') as file_handle:
+    with open(args.data_path, 'rb') as file_handle:
         data = pickle.load(file_handle)
 
     train_image = data['train_image']
@@ -86,7 +86,8 @@ def make_discrete_vae_data(args):
 
     We don't use the 10k validation to be consistent w/ continuous case
     """
-    with args._run.open_resource(args.data_path, 'rb') as file_handle:
+    # read data
+    with open(args.data_path, 'rb') as file_handle:
         data = pickle.load(file_handle)
 
     train_image = PixelIntensity(tensor(data['x_train'], args))

@@ -1,3 +1,5 @@
+from pathlib import Path
+from src.ml_helpers import detect_cuda
 # Assertions
 
 SCHEDULES         = ['log', 'linear', 'moments']
@@ -56,4 +58,19 @@ def validate_dataset_path(args):
     else:
         raise ValueError("Unknown learning task")
 
-    return data_path
+    return Path(data_path)
+
+def validate_args(args):
+    # check assertions
+    validate_hypers(args)
+
+    # check data path
+    args.data_path = validate_dataset_path(args)
+
+    # check artifact_dir
+    Path(args.artifact_dir).mkdir(exist_ok=True)
+
+    # check cuda
+    args = detect_cuda(args)
+
+    return args

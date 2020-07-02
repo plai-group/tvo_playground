@@ -1,22 +1,27 @@
+import json
+import os
+import sys
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
-import uuid
-import json
 
+import numpy as np
 import torch
+import wandb
 from sacred import Experiment
 
 import src.ml_helpers as mlh
-
-from src import util
-from src import assertions
+from src import assertions, util
 from src.data_handler import get_data
-from src.models.model_handler import get_model
-import numpy as np
 from src.models import schedules
-ex = Experiment()
+from src.models.model_handler import get_model
 
-torch.set_printoptions(sci_mode=False)
+# Use sacred for command line interface + hyperparams
+# Use wandb for experiment tracking
+ex = Experiment()
+WANDB_PROJECT_NAME = 'SET_PROJECT_NAME'
+if '--unobserved' in sys.argv:
+    os.environ['WANDB_MODE'] = 'dryrun'
 
 
 @ex.config
@@ -35,7 +40,7 @@ def my_config():
     """
     # learning task
     model_name = 'continuous_vae'
-    model_dir = './models'
+    artifact_dir = './artifacts'
     data_dir = './data'
 
     # Model
@@ -125,76 +130,46 @@ def my_config():
 
 
 
-def init(config, _run):
+def init(config, run):
+    # init stuff
     args = SimpleNamespace(**config)
-    assertions.validate_hypers(args)
+    args = assertions.validate_args(args)
     mlh.seed_all(args.seed)
+    args._run = run
 
-    args.data_path = assertions.validate_dataset_path(args)
-
-    if args.activation is not None:
-        if 'relu' in args.activation:
-            args.activation = torch.nn.ReLU()
-        elif 'elu' in args.activation:
-            args.activation = torch.nn.ELU()
-        else:
-            args.activation = torch.nn.ReLU()
-
-    args._run = _run
-
-    if args.checkpoint or args.record:
-        unique_directory = Path(args.model_dir) / str(uuid.uuid4())
-        unique_directory.mkdir()
-        args.unique_directory = unique_directory
-
-        # Save args json for grepability
-        with open(args.unique_directory / 'args.json', 'w') as outfile:
-            json.dump(dict(config), outfile, indent=4)
-
-    args.loss_name = args.loss
-
-    if args.cuda and torch.cuda.is_available():
-        args.device = torch.device('cuda')
-        args.cuda = True
-    else:
-        args.device = torch.device('cpu')
-        args.cuda = False
-
+    # init scheduler
     args.partition_scheduler = schedules.get_partition_scheduler(args)
     args.partition = util.get_partition(args)
 
-    args.data_path = Path(args.data_path)
-    return args
-
-
-@ex.capture
-def log_scalar(_run=None, **kwargs):
-    assert "step" in kwargs, 'Step must be included in kwargs'
-    step = kwargs.pop('step')
-
-    for k, v in kwargs.items():
-        _run.log_scalar(k, float(v), step)
-
-    loss_string = " ".join(("{}: {:.4f}".format(*i) for i in kwargs.items()))
-    print(f"Epoch: {step} - {loss_string}")
-
-def train(args):
-    # read data
+    # init data
     train_data_loader, test_data_loader = get_data(args)
-
-    # attach data to args
     args.train_data_loader = train_data_loader
     args.test_data_loader = test_data_loader
 
-    # Make models
+    # init model
     model = get_model(train_data_loader, args)
+
+    # init optimizer
     model.init_optimizer()
 
+    return model, args
+
+
+def log_scalar(**kwargs):
+    assert "step" in kwargs, 'Step must be included in kwargs'
+    step = kwargs.pop('step')
+    wandb.log(kwargs)
+    loss_string = " ".join(("{}: {:.4f}".format(*i) for i in kwargs.items()))
+    print(f"Epoch: {step} - {loss_string}")
+
+
+def train(model, args):
     for epoch in range(args.epochs):
+
         if mlh.is_schedule_update_time(epoch, args):
             args.partition = args.partition_scheduler(model, args)
 
-        train_logpx, train_elbo = model.train(train_data_loader)
+        train_logpx, train_elbo = model.train(args.train_data_loader)
 
         log_scalar(train_elbo=train_elbo, train_logpx=train_logpx, step=epoch)
 
@@ -204,7 +179,7 @@ def train(args):
             log_scalar(grad_variance=grad_variance, step=epoch)
 
         if mlh.is_test_time(epoch, args):
-            test_logpx, test_kl = model.evaluate_model_and_inference_network(test_data_loader)
+            test_logpx, test_kl = model.evaluate_model_and_inference_network(args.test_data_loader)
             log_scalar(test_logpx=test_logpx, test_kl=test_kl, step=epoch)
 
         # ------ end of training loop ---------
@@ -223,15 +198,9 @@ def train(args):
 
 
 @ex.automain
-def experiment(_config, _run):
-    '''
-    Amended to return
-    '''
-
-    args = init(_config, _run)
-    result, model = train(args)
-
-    if args.record:
-        model.record_artifacts(_run)
-
-    return result
+def command_line_entry(_run,_config):
+    wandb_run = wandb.init(project = WANDB_PROJECT_NAME,
+                            config = _config,
+                              tags = [_run.experiment_info['name']])
+    model, args = init(_config, _run)
+    train(model, args)
