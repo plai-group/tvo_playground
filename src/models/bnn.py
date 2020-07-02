@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import torch
+from torch.distributions import Normal
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -13,20 +14,14 @@ from src.ml_helpers import duplicate, spread, get_unique_dir
 from src.models.base import ProbModelBaseClass
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
-
-PI = 0.5
-SIGMA_1 = torch.FloatTensor([math.exp(-0)])
-SIGMA_2 = torch.FloatTensor([math.exp(-6)])
-
-# SIGMA_1 = torch.cuda.FloatTensor([math.exp(-0)])
-# SIGMA_2 = torch.cuda.FloatTensor([math.exp(-6)])
+import src.ml_helpers as mlh
 
 class Gaussian(object):
     def __init__(self, mu, rho, device):
         super().__init__()
         self.mu = mu
         self.rho = rho
-        self.normal = torch.distributions.Normal(0,1)
+        self.normal = Normal(0, 1)
         self.size = self.rho.size()
         self.device = device
         self.sum_dim = [1,2] if len(self.size) == 2 else [1]
@@ -51,8 +46,9 @@ class ScaleMixtureGaussian(object):
         self.pi = pi
         self.sigma1 = sigma1
         self.sigma2 = sigma2
-        self.gaussian1 = torch.distributions.Normal(0,sigma1)
-        self.gaussian2 = torch.distributions.Normal(0,sigma2)
+
+        self.gaussian1 = Normal(0, sigma1)
+        self.gaussian2 = Normal(0, sigma2)
 
     # replace w/ logsumexp
     def log_prob(self, input):
@@ -67,15 +63,22 @@ class BayesianLinear(nn.Module):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
+
         # Weight parameters
         self.weight_mu = nn.Parameter(torch.Tensor(out_features, in_features).uniform_(-0.2, 0.2))
         self.weight_rho = nn.Parameter(torch.Tensor(out_features, in_features).uniform_(-5,-4))
         self.weight = Gaussian(self.weight_mu, self.weight_rho, args.device)
+
         # Bias parameters
         self.bias_mu = nn.Parameter(torch.Tensor(out_features).uniform_(-0.2, 0.2))
         self.bias_rho = nn.Parameter(torch.Tensor(out_features).uniform_(-5,-4))
         self.bias = Gaussian(self.bias_mu, self.bias_rho, args.device)
+
         # Prior distributions
+        PI = mlh.tensor(0.5, args)
+        SIGMA_1 = mlh.tensor(math.exp(-0), args)
+        SIGMA_2 = mlh.tensor(math.exp(-6), args)
+
         self.weight_prior = ScaleMixtureGaussian(PI, SIGMA_1, SIGMA_2)
         self.bias_prior = ScaleMixtureGaussian(PI, SIGMA_1, SIGMA_2)
         self.log_prior = 0
@@ -210,9 +213,9 @@ class BayesianNetwork(ProbModelBaseClass):
         self.writer.add_histogram('histogram/b3_rho', self.l3.bias_rho, epoch)
 
 
-    def evaluate_model_and_inference_network(self, data_loader, epoch=None):
+    def test(self, data_loader, step=None):
         """
-        overwrite evaluate_model_and_inference_network to add classification
+        overwrite test to add classification
         evaluation as well. this avoids having to add bnn-specific conditionals in main.py
         """
         self.eval()
@@ -224,8 +227,8 @@ class BayesianNetwork(ProbModelBaseClass):
         kl_total = 0
         num_data = 0
 
+        data_loader = tqdm(data_loader) if self.args.verbose else data_loader
         with torch.no_grad():
-            data_loader = tqdm(data_loader) if self.args.verbose else data_loader
             for data in iter(data_loader):
                 log_p, kl = self.get_log_p_and_kl(data, self.args.test_S)
                 sample_prediction, ensemble_prediction = self.get_prediction()
@@ -242,8 +245,8 @@ class BayesianNetwork(ProbModelBaseClass):
         # df.to_csv(self.tensorboard_dir / f"classification_accuracy_epoch_{epoch}.csv")
 
         for name, row in df.iterrows():
-            self.writer.add_scalar(f'accuracy/{name}', float(row), epoch)
-            self.args._run.log_scalar(name, float(row), epoch)
+            self.writer.add_scalar(f'accuracy/{name}', float(row), step)
+            self.args._run.log_scalar(name, float(row), step)
 
         print(df)
 

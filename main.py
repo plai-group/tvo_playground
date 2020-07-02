@@ -131,11 +131,12 @@ def my_config():
 
 
 def init(config, run):
-    # init stuff
+    # general init
     args = SimpleNamespace(**config)
     args = assertions.validate_args(args)
     mlh.seed_all(args.seed)
     args._run = run
+    args.wandb = wandb
 
     # init scheduler
     args.partition_scheduler = schedules.get_partition_scheduler(args)
@@ -165,11 +166,10 @@ def log_scalar(**kwargs):
 
 def train(model, args):
     for epoch in range(args.epochs):
-
         if mlh.is_schedule_update_time(epoch, args):
             args.partition = args.partition_scheduler(model, args)
 
-        train_logpx, train_elbo = model.train(args.train_data_loader)
+        train_logpx, train_elbo = model.step_epoch(args.train_data_loader, step=epoch)
 
         log_scalar(train_elbo=train_elbo, train_logpx=train_logpx, step=epoch)
 
@@ -179,7 +179,7 @@ def train(model, args):
             log_scalar(grad_variance=grad_variance, step=epoch)
 
         if mlh.is_test_time(epoch, args):
-            test_logpx, test_kl = model.evaluate_model_and_inference_network(args.test_data_loader)
+            test_logpx, test_kl = model.test(args.test_data_loader, step=epoch)
             log_scalar(test_logpx=test_logpx, test_kl=test_kl, step=epoch)
 
         # ------ end of training loop ---------

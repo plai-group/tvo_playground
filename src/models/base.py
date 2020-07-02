@@ -2,6 +2,7 @@ from torch import nn
 from src import ml_helpers as mlh
 from collections import defaultdict
 import numpy as np
+from tqdm import tqdm
 import torch
 
 from src.util import compute_tvo_loss, compute_wake_theta_loss, compute_wake_phi_loss, compute_vimco_loss, compute_tvo_reparam_loss, compute_iwae_loss
@@ -221,8 +222,8 @@ class ProbModelBaseClass(nn.Module):
         # need to find a better way to do this
         pass
 
-
-    def train(self, data_loader):
+    def step_epoch(self, data_loader, step=None):
+        data_loader = tqdm(data_loader) if self.args.verbose else data_loader
         if self.dual_objective:
             return self.train_dual_objectives(data_loader)
         else:
@@ -305,24 +306,18 @@ class ProbModelBaseClass(nn.Module):
 
         return train_logpx, train_elbo
 
-    def evaluate_model_and_inference_network(self, data_loader):
+    def test(self, data_loader, step=None):
         log_p_total = 0
         kl_total = 0
         num_data = 0
+        data_loader = tqdm(data_loader) if self.args.verbose else data_loader
         with torch.no_grad():
-            for data in iter(data_loader):
+            for data in data_loader:
                 log_p, kl = self.get_log_p_and_kl(data, self.args.test_S)
                 log_p_total += torch.sum(log_p).item()
                 kl_total += torch.sum(kl).item()
                 num_data += data[0].shape[0]
         return log_p_total / num_data, kl_total / num_data
-
-    def evaluate_model(self, data_loader):
-        log_px = 0
-        with torch.no_grad():
-            for idx, data in enumerate(data_loader):
-                log_px += self.get_test_log_evidence(data, self.args.test_S)
-        return log_px / len(data_loader)
 
     def record_stats(self):
         '''

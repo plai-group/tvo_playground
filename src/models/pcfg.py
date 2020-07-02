@@ -637,96 +637,15 @@ class PCFG(ProbModelBaseClass):
     def log_likelihood(self):
         return self._log_likelihood
 
-    # These functions are overwritten to avoid repeated calls to set_internal which is expensive
-    def train_epoch_single_objective(self, data_loader, optimizer, epoch=None):
-        train_logpx = 0
-        train_elbo = 0
-        train_tvo_log_evidence = 0
-
-        for idx, data in enumerate(data_loader):
-            optimizer.zero_grad()
-            loss, logpx, elbo, tvo_log_evidence = self.forward(data)
-            loss.backward()
-            optimizer.step()
-
-            train_logpx += logpx.item()
-            train_elbo += elbo.item()
-            train_tvo_log_evidence+=tvo_log_evidence.item()
-
-        train_logpx = train_logpx / len(data_loader)
-        train_elbo = train_elbo / len(data_loader)
-        train_tvo_log_evidence = train_tvo_log_evidence/len(data_loader)
-
-        self.evaluate_pq(data_loader, epoch)
-
-        return train_logpx, train_elbo, train_tvo_log_evidence
-
-
-    def train_epoch_dual_objectives(self, data_loader, optimizer_phi, optimizer_theta, epoch=None):
-        train_logpx = 0
-        train_elbo = 0
-        train_tvo_log_evidence = 0
-        for idx, data in enumerate(data_loader):
-            optimizer_phi.zero_grad()
-            optimizer_theta.zero_grad()
-            if self.args.loss == 'tvo-sleep':
-                wake_theta_loss = self.get_tvo_loss(data)
-            else:
-                wake_theta_loss = self.get_wake_theta_loss(data)
-            wake_theta_loss.backward()
-            optimizer_theta.step()
-
-            optimizer_phi.zero_grad()
-            optimizer_theta.zero_grad()
-
-            if self.args.loss in ['wake-sleep', 'tvo-sleep']:
-                sleep_phi_loss = self.get_sleep_phi_loss()
-                sleep_phi_loss.backward()
-            elif self.args.loss in ['wake-wake']:
-                wake_phi_loss = self.get_wake_phi_loss(data)
-                wake_phi_loss.backward()
-            else:
-                raise ValueError(
-                    "{} is an invalid loss".format(self.args.loss))
-
-            optimizer_phi.step()
-
-            with torch.no_grad():
-                log_weight = self.elbo()
-                logpx = self.get_test_log_evidence(data, self.args.S, log_weight=log_weight)
-                elbo = self.get_test_elbo(data, self.args.S, log_weight=log_weight)
-                tvo_log_evidence = self.get_tvo_log_evidence(data, self.args.S, log_weight=log_weight)
-
-            train_logpx += logpx.item()
-            train_elbo += elbo.item()
-            train_tvo_log_evidence+=tvo_log_evidence.item()
-
-        train_logpx = train_logpx / len(data_loader)
-        train_elbo = train_elbo / len(data_loader)
-        train_tvo_log_evidence=train_tvo_log_evidence/len(data_loader)
-
-        self.evaluate_pq(data_loader, epoch)
-
-        return train_logpx, train_elbo, train_tvo_log_evidence
-
-    def forward(self, data):
-        assert isinstance(data, (tuple, list)), "Data must be a tuple (X,y) or (X, )"
-
-        if self.args.loss == 'reinforce':
-            loss = self.get_reinforce_loss(data)
-        elif self.args.loss == 'tvo':
-            loss = self.get_tvo_loss(data)
+    def train(self, data_loader, step=None):
+        if self.dual_objective:
+            train_logpx, train_elbo = self.train_dual_objectives(data_loader)
         else:
-            raise ValueError("{} is an invalid loss".format(self.args.loss))
+            train_logpx, train_elbo = self.train_single_objective(data_loader)
 
-        # This functions is overwritten to avoid repeated calls to set_internal which is expensive
-        with torch.no_grad():
-            log_weight = self.elbo()
-            logpx = self.get_test_log_evidence(data, self.args.S, log_weight=log_weight)
-            elbo = self.get_test_elbo(data, self.args.S, log_weight=log_weight)
-            tvo_log_evidence = self.get_tvo_log_evidence(data, self.args.S, log_weight=log_weight)
+        self.evaluate_pq(data_loader, step)
 
-        return loss, logpx, elbo, tvo_log_evidence
+        return train_logpx, train_elbo
 
     def evaluate_pq(self, data_loader, epoch):
         true_generative_model = data_loader.dataset.true_generative_model
@@ -737,8 +656,7 @@ class PCFG(ProbModelBaseClass):
             "q_error_to_model":util.get_q_error(self.generative_model, self.inference_network)
             }
 
-        for k, v in metrics.items():
-            self.args._run.log_scalar(k, float(v), epoch)
+        self.args.wandb.log(metrics)
 
         loss_string = " ".join(("{}: {:.4f}".format(*i) for i in metrics.items()))
         print(f"Epoch: {epoch} - {loss_string}")

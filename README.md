@@ -8,11 +8,11 @@ clean tvo code to begin new research
  - [x] test iwae_dreg
  - [ ] test bnn
  - [ ] test pcfg
- - [ ] convert to wandb
- - [ ] remove save datasets
- - [ ] test all baseline losses
- - [ ] standardize artifacts dir
- - [ ] import base.py trick from bqd
+ - [x] convert to wandb
+ - [x] remove save datasets
+ - [x] test all baseline losses
+ - [x] standardize artifacts dir
+ - [x] import base.py trick from bqd
 
 ### losses
 - tvo

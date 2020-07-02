@@ -1,14 +1,13 @@
-# Adapted from
-# https://github.com/tensorflow/models/tree/master/research/rebar and
-# https://github.com/duvenaud/relax/blob/master/datasets.py
-
 import pickle
 import logging
 import numpy as np
 from pathlib import Path
 import torch.utils.data
 from src.ml_helpers import tensor, get_data_loader
-from torch.utils.data import Dataset
+from src.models.pcfg import GenerativeModel as PCFGGenerativeModel
+from src.models.pcfg_util import read_pcfg
+from torchvision import datasets, transforms
+from torch.utils.data import Dataset, IterableDataset
 from skimage import color, io as imageio, transform
 
 
@@ -80,13 +79,10 @@ def make_discrete_vae_data(args):
     Annoyingly the continuous and discrete vae literature uses different train/val/test/split.
     For continuous we use 60k train / 10k test
     in accordance with IWAE paper: https://arxiv.org/pdf/1509.00519.pdf
-
     For discrete we use 50k train / 10k validation / 10k test
     in accordance with VIMCO paper: https://arxiv.org/pdf/1602.06725.pdf
-
     We don't use the 10k validation to be consistent w/ continuous case
     """
-    # read data
     with open(args.data_path, 'rb') as file_handle:
         data = pickle.load(file_handle)
 
@@ -98,11 +94,61 @@ def make_discrete_vae_data(args):
 
     return train_data_loader, test_data_loader
 
+
+def make_bnn_data(args):
+    LOADER_KWARGS = {'num_workers': 1, 'pin_memory': True} if torch.cuda.is_available() else {}
+    train_data_loader = torch.utils.data.DataLoader(
+        datasets.FashionMNIST(
+            args.data_path, train=True, download=True,
+            transform=transforms.ToTensor()),
+        batch_size=args.batch_size, shuffle=True, **LOADER_KWARGS)
+    test_data_loader = torch.utils.data.DataLoader(
+        datasets.FashionMNIST(
+            args.data_path, train=False, download=True,
+            transform=transforms.ToTensor()),
+        batch_size=args.test_batch_size, shuffle=False, **LOADER_KWARGS)
+
+    return train_data_loader, test_data_loader
+
+
+class PCFGDataset(Dataset):
+    def __init__(self, path, N=1000):
+        super(PCFGDataset).__init__()
+        grammar, true_production_probs = read_pcfg(path)
+        self.true_generative_model = PCFGGenerativeModel(grammar, true_production_probs)
+        # data comes from true_generative_model so we have an infinite amount of it.
+        # Set len = 1000 arbitrarily
+        self.N = N
+
+    def __len__(self):
+        return self.N
+
+    def __getitem__(self, idx):
+        return self.true_generative_model.sample_obs()
+
+def make_pcfg_data(args):
+    # instantiate a gen model w/ true production probabilities to create data
+    dataset = PCFGDataset(args.data_path, N=args.batch_size)
+
+    loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        batch_sampler=None,
+        shuffle=False,
+        collate_fn=lambda x: (x,) # this is important otherwise default collate_fn messes up batching
+        )
+
+    return loader, loader
+
+
 def get_data(args):
     if args.model_name == 'continuous_vae':
         return make_continuous_vae_data(args)
     elif args.model_name == 'discrete_vae':
         return make_discrete_vae_data(args)
+    elif args.model_name == 'bnn':
+        return make_bnn_data(args)
+    elif args.model_name == 'pcfg':
+        return make_pcfg_data(args)
     else:
-        raise ValueError(
-            "{} is an invalid learning task".format(args.model_name))
+        raise ValueError("{} is an invalid learning task".format(args.model_name))
