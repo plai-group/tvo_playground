@@ -172,27 +172,41 @@ class ProbModelBaseClass(nn.Module):
     # ============================
     # ---------- Helpers ----------
     # ============================
-
-    def get_test_log_evidence(self, data, S):
+    def get_test_metrics(self, data, S):
+        """
+        Computes logpx, test_elbo without
+        calling set_internals twice
+        """
         with torch.no_grad():
             self.set_internals(data, S)
             log_weight = self.elbo()
+            logpx = self.get_test_log_evidence(data, S, log_weight=log_weight)
+            test_elbo = self.get_test_elbo(data, S, log_weight=log_weight)
+        return logpx, test_elbo
+
+    def get_test_log_evidence(self, data, S, log_weight=None):
+        with torch.no_grad():
+            if log_weight is None:
+                self.set_internals(data, S)
+                log_weight = self.elbo()
             log_evidence = torch.logsumexp(log_weight, dim=1) - np.log(S)
             iwae_log_evidence = torch.mean(log_evidence)
 
         return iwae_log_evidence
 
-    def get_test_elbo(self, data, S):
+    def get_test_elbo(self, data, S, log_weight=None):
         with torch.no_grad():
-            self.set_internals(data, S)
-            log_weight = self.elbo()
+            if log_weight is None:
+                self.set_internals(data, S)
+                log_weight = self.elbo()
             elbo = torch.mean(log_weight)
         return elbo
 
-    def get_log_p_and_kl(self, data, S):
-        self.set_internals(data, S)
-        log_weight = self.elbo()
-
+    def get_log_p_and_kl(self, data, S, log_weight=None):
+        with torch.no_grad():
+            if log_weight is None:
+                self.set_internals(data, S)
+                log_weight = self.elbo()
         log_p = torch.logsumexp(log_weight, dim=1) - np.log(S)
         elbo = torch.mean(log_weight, dim=1)
         kl = log_p - elbo
@@ -275,8 +289,7 @@ class ProbModelBaseClass(nn.Module):
 
             self.optimizer_phi_only.step()
 
-            logpx = self.get_test_log_evidence(data, self.args.valid_S)
-            elbo = self.get_test_elbo(data, self.args.valid_S)
+            logpx, elbo = self.get_test_metrics(data, self.args.valid_S)
 
             if self.args.record:
                 self.record_stats()
@@ -380,8 +393,7 @@ class ProbModelBaseClass(nn.Module):
         else:
             raise ValueError(f"{self.args.loss} is an invalid loss")
 
-        logpx = self.get_test_log_evidence(data, self.args.valid_S)
-        test_elbo = self.get_test_elbo(data, self.args.valid_S)
+        logpx, test_elbo = self.get_test_metrics(data, self.args.valid_S)
         return loss, logpx, test_elbo
 
 
