@@ -13,7 +13,7 @@ from src import assertions
 from src.data_handler import get_data
 from src.models.model_handler import get_model
 import numpy as np
-from src.models import updates
+from src.models import schedules
 ex = Experiment()
 
 torch.set_printoptions(sci_mode=False)
@@ -34,7 +34,7 @@ def my_config():
     so hyperparameters are accessable to the model via self.args.hyper_param
     """
     # learning task
-    learning_task = 'continuous_vae'
+    model_name = 'continuous_vae'
     model_dir = './models'
     data_dir = './data'
 
@@ -60,11 +60,10 @@ def my_config():
     schedule = 'log'
     schedule_update_frequency = 1  # if 0, initalize once and never update
     per_sample = False # Update schedule for each sample
-
+    per_batch = False # schedule update per batch
 
     # Recording
     record = False
-    record_partition = None  # unused.  possibility to std-ize partitions for evaluation
     verbose = False
     dataset = 'mnist'
 
@@ -87,16 +86,18 @@ def my_config():
     train_only = False
     save_grads = False
 
-    if learning_task == 'discrete_vae':
-        dataset = 'binarized_mnist'
-        # dataset = 'binarized_omniglot'
+    phi_tag = 'encoder'
+    theta_tag = 'decoder'
 
+
+    if model_name == 'discrete_vae':
+        dataset = 'binarized_mnist'
         # To match paper (see app. I)
         num_stochastic_layers = 3
         num_deterministic_layers = 0
 
 
-    if learning_task == 'bnn':
+    if model_name == 'bnn':
         dataset = 'fashion_mnist'
 
         bnn_mini_batch_elbo = True
@@ -109,7 +110,7 @@ def my_config():
         test_S = 10
         valid_S = 10
 
-    if learning_task == 'pcfg':
+    if model_name == 'pcfg':
         dataset = 'astronomers'
         ## to match rrws code
         batch_size = 2
@@ -159,7 +160,7 @@ def init(config, _run):
         args.device = torch.device('cpu')
         args.cuda = False
 
-    args.partition_scheduler = updates.get_partition_scheduler(args)
+    args.partition_scheduler = schedules.get_partition_scheduler(args)
     args.partition = util.get_partition(args)
 
     args.data_path = Path(args.data_path)
@@ -177,32 +178,6 @@ def log_scalar(_run=None, **kwargs):
     loss_string = " ".join(("{}: {:.4f}".format(*i) for i in kwargs.items()))
     print(f"Epoch: {step} - {loss_string}")
 
-
-@ex.capture
-def save_checkpoint(model, epoch, train_elbo, train_logpx, opt, args, _run=None, _config=None):
-    path = args.unique_directory / 'model_epoch_{:04}.pt'.format(epoch)
-
-    print("Saving checkpoint: {}".format(path))
-
-    if args.loss in ['wake-wake', 'wake-sleep']:
-        torch.save({'epoch': epoch,
-                    'model': model.state_dict(),
-                    'optimizer_phi': opt[0].state_dict(),
-                    'optimizer_theta': opt[1].state_dict(),
-                    'train_elbo': train_elbo,
-                    'train_logpx': train_logpx,
-                    'config': dict(_config)}, path)
-    else:
-        torch.save({'epoch': epoch,
-                    'model': model.state_dict(),
-                    'optimizer': opt[0].state_dict(),
-                    'train_elbo': train_elbo,
-                    'train_logpx': train_logpx,
-                    'config': dict(_config)}, path)
-
-    _run.add_artifact(path)
-
-
 def train(args):
     # read data
     train_data_loader, test_data_loader = get_data(args)
@@ -213,28 +188,13 @@ def train(args):
 
     # Make models
     model = get_model(train_data_loader, args)
-
-    # Make optimizer
-    if args.loss in ['wake-wake', 'wake-sleep']:
-        optimizer_phi = torch.optim.Adam(
-            (params for name, params in model.named_parameters() if 'encoder' in name), lr=args.lr)
-        optimizer_theta = torch.optim.Adam(
-            (params for name, params in model.named_parameters() if 'decoder' in name), lr=args.lr)
-
-    else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    model.init_optimizer()
 
     for epoch in range(args.epochs):
         if mlh.is_schedule_update_time(epoch, args):
             args.partition = args.partition_scheduler(model, args)
 
-        if args.loss in ['wake-wake', 'wake-sleep']:
-            train_logpx, train_elbo = model.train_epoch_dual_objectives(
-                train_data_loader, optimizer_phi, optimizer_theta)
-        else:
-            # addl recording within model.base
-            train_logpx, train_elbo = model.train_epoch_single_objective(
-                train_data_loader, optimizer)
+        train_logpx, train_elbo = model.train(train_data_loader)
 
         log_scalar(train_elbo=train_elbo, train_logpx=train_logpx, step=epoch)
 
@@ -244,14 +204,9 @@ def train(args):
             log_scalar(grad_variance=grad_variance, step=epoch)
 
         if mlh.is_test_time(epoch, args):
-            test_logpx, test_kl = model.evaluate_model_and_inference_network(
-                test_data_loader)
+            test_logpx, test_kl = model.evaluate_model_and_inference_network(test_data_loader)
             log_scalar(test_logpx=test_logpx, test_kl=test_kl, step=epoch)
 
-        if mlh.is_checkpoint_time(epoch, args):
-            opt = [optimizer_phi, optimizer_theta] if args.loss in [
-                'wake-wake', 'wake-sleep'] else [optimizer]
-            save_checkpoint(model, epoch, train_elbo, train_logpx, opt, args)
         # ------ end of training loop ---------
 
     if args.train_only:

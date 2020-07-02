@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import src.pcfg_util as util
+import src.models.pcfg_util as util
 from torch.distributions import *
 from src.models.base import ProbModelBaseClass
 import numpy as np
@@ -714,7 +714,7 @@ class PCFG(ProbModelBaseClass):
 
         if self.args.loss == 'reinforce':
             loss = self.get_reinforce_loss(data)
-        elif self.args.loss == 'thermo' or self.args.loss == 'tvo':
+        elif self.args.loss == 'tvo':
             loss = self.get_tvo_loss(data)
         else:
             raise ValueError("{} is an invalid loss".format(self.args.loss))

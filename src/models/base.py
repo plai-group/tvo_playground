@@ -4,7 +4,8 @@ from collections import defaultdict
 import numpy as np
 import torch
 
-from src.util import compute_tvo_loss, compute_wake_theta_loss, compute_wake_phi_loss, compute_vimco_loss
+from src.util import compute_tvo_loss, compute_wake_theta_loss, compute_wake_phi_loss, compute_vimco_loss, compute_tvo_reparam_loss, compute_iwae_loss
+from src import assertions
 from src import util
 
 
@@ -28,7 +29,7 @@ class ProbModelBaseClass(nn.Module):
         self.hist = defaultdict(list)
         self.record_results = defaultdict(mlh.AverageMeter)
 
-        if self.args.loss in ['elbo', 'iwae']:
+        if self.args.loss in assertions.REQUIRES_REPARAM:
             print("Reparam turned: ON")
             self.reparam = True
         else:
@@ -39,6 +40,16 @@ class ProbModelBaseClass(nn.Module):
         self.x = None  # Observations
         self.y = None  # Labels
         self.z = None  # Latent samples
+
+        if self.args.loss in assertions.DUAL_LOSSES:
+            self.dual_objective = True
+        else:
+            self.dual_objective = False
+
+        self.optimizer  = None
+        self.optimizer_phi_only   = None
+        self.optimizer_theta_only = None
+
 
     def __iter__(self):
         for attr, value in self.__dict__.items():
@@ -147,6 +158,17 @@ class ProbModelBaseClass(nn.Module):
         """
         raise NotImplementedError
 
+    def init_optimizer(self):
+        # Make optimizer
+        if self.dual_objective:
+            self.optimizer_phi_only = torch.optim.Adam(
+                (params for name, params in self.named_parameters() if self.args.phi_tag in name), lr=self.args.lr)
+            self.optimizer_theta_only = torch.optim.Adam(
+                (params for name, params in self.named_parameters() if self.args.theta_tag in name), lr=self.args.lr)
+        else:
+            self.optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr)
+
+
     # ============================
     # ---------- Helpers ----------
     # ============================
@@ -185,17 +207,23 @@ class ProbModelBaseClass(nn.Module):
         # need to find a better way to do this
         pass
 
-    def train_epoch_single_objective(self, data_loader, optimizer):
+
+    def train(self, data_loader):
+        if self.dual_objective:
+            return self.train_dual_objectives(data_loader)
+        else:
+            return self.train_single_objective(data_loader)
+
+    def train_single_objective(self, data_loader):
         train_logpx = 0
         train_elbo = 0
         for idx, data in enumerate(data_loader):
-            optimizer.zero_grad()
+            self.optimizer.zero_grad()
 
-            # Forward modified to update beta for args.per_sample = True
             loss, logpx, elbo = self.forward(data)
 
             loss.backward()
-            optimizer.step()
+            self.optimizer.step()
 
             if self.args.record:
                 self.record_stats()
@@ -211,31 +239,41 @@ class ProbModelBaseClass(nn.Module):
 
         return train_logpx, train_elbo
 
-    def train_epoch_dual_objectives(self, data_loader, optimizer_phi, optimizer_theta):
+    def train_dual_objectives(self, data_loader):
         train_logpx = 0
         train_elbo = 0
         for idx, data in enumerate(data_loader):
-            optimizer_phi.zero_grad()
-            optimizer_theta.zero_grad()
+            self.optimizer_phi_only.zero_grad()
+            self.optimizer_theta_only.zero_grad()
 
-            wake_theta_loss = self.get_wake_theta_loss(data)
+            if self.args.loss == 'tvo_reparam': # p optimized using tvo
+                wake_theta_loss = self.get_tvo_loss(data)
+            elif self.args.loss == 'iwae_dreg': # p optimized using IWAE (DReG update is only for q)
+                wake_theta_loss = self.get_iwae_loss(data)
+            elif self.args.loss in ['wake-wake', 'wake-sleep']:
+                wake_theta_loss = self.get_wake_theta_loss(data)
+            else:
+                raise ValueError(f"{self.args.loss} is an invalid loss")
+
             wake_theta_loss.backward()
-            optimizer_theta.step()
+            self.optimizer_theta_only.step()
 
-            optimizer_phi.zero_grad()
-            optimizer_theta.zero_grad()
-
-            if self.args.loss == 'wake-sleep':
+            if self.args.loss in ['tvo_reparam']:
+                sleep_phi_loss = self.get_tvo_reparam_loss(data)
+                sleep_phi_loss.backward()
+            elif self.args.loss == 'iwae_dreg':
+                sleep_phi_loss = self.get_iwae_dreg_loss(data)
+                sleep_phi_loss.backward()
+            elif self.args.loss == 'wake-sleep':
                 sleep_phi_loss = self.get_sleep_phi_loss(data)
                 sleep_phi_loss.backward()
             elif self.args.loss == 'wake-wake':
                 wake_phi_loss = self.get_wake_phi_loss(data)
                 wake_phi_loss.backward()
             else:
-                raise ValueError(
-                    "{} is an invalid loss".format(self.args.loss))
+                raise ValueError(f"{self.args.loss} is an invalid loss")
 
-            optimizer_phi.step()
+            self.optimizer_phi_only.step()
 
             logpx = self.get_test_log_evidence(data, self.args.valid_S)
             elbo = self.get_test_elbo(data, self.args.valid_S)
@@ -286,14 +324,10 @@ class ProbModelBaseClass(nn.Module):
         # Always use validation sample size
         S = self.args.valid_S
 
-        with torch.no_grad():
-            if self.args.record_partition is not None:
-                partition = self.args.record_partition
-            elif record_partition:
-                partition = torch.linspace(0, 1.0, 101, device='cuda')
-            else:
-                partition = self.args.partition
+        # Always use same partition grid for comparability
+        partition = mlh.tensor(np.linspace(0, 1.0, 101), args=self.args)
 
+        with torch.no_grad():
             log_iw = self.elbo().unsqueeze(-1) if len(self.elbo().shape) < 3 else self.elbo()
 
             heated_log_weight = log_iw * partition
@@ -331,8 +365,7 @@ class ProbModelBaseClass(nn.Module):
     # ============================
 
     def forward(self, data):
-        assert isinstance(data, (tuple, list)
-                          ), "Data must be a tuple (X,y) or (X, )"
+        assert isinstance(data, (tuple, list)), "Data must be a tuple (X,y) or (X, )"
 
         if self.args.loss == 'reinforce':
             loss = self.get_reinforce_loss(data)
@@ -340,16 +373,26 @@ class ProbModelBaseClass(nn.Module):
             loss = self.get_elbo_loss(data)
         elif self.args.loss == 'iwae':
             loss = self.get_iwae_loss(data)
-        elif self.args.loss == 'thermo' or self.args.loss == 'tvo':
+        elif self.args.loss == 'tvo':
             loss = self.get_tvo_loss(data)
         elif self.args.loss == 'vimco':
             loss = self.get_vimco_loss(data)
         else:
-            raise ValueError("{} is an invalid loss".format(self.args.loss))
+            raise ValueError(f"{self.args.loss} is an invalid loss")
 
         logpx = self.get_test_log_evidence(data, self.args.valid_S)
         test_elbo = self.get_test_elbo(data, self.args.valid_S)
         return loss, logpx, test_elbo
+
+
+    def get_iwae_loss(self, data):
+        '''
+        IWAE loss = log mean p(x,z) / q(z|x)
+        '''
+        assert self.reparam is True, 'Reparam must be on for iwae loss'
+        self.set_internals(data, self.args.S)
+        log_weight = self.elbo()
+        return compute_iwae_loss(log_weight)
 
 
     def get_iwae_dreg_loss(self, data):
@@ -358,7 +401,7 @@ class ProbModelBaseClass(nn.Module):
         #if self.args.stop_parameter_grad:
         self.enable_stop_grads()
 
-        self.set_internals(data, self.args.S) # stop_parameter_grad = self.args.stop_parameter_grad) #True)
+        self.set_internals(data, self.args.S)
 
         log_weight = self.elbo()
 
@@ -368,19 +411,6 @@ class ProbModelBaseClass(nn.Module):
             torch.mean(torch.sum(torch.pow(normalized_weight,2).detach() * log_weight, 1), 0)
         return loss
 
-    def get_iwae_loss(self, data):
-        assert self.reparam is True, 'Reparam must be on for iwae loss'
-        self.set_internals(data, self.args.S)
-
-        log_weight = self.elbo()
-        stable_log_weight = log_weight - \
-            torch.max(log_weight, 1)[0].unsqueeze(1)
-        weight = torch.exp(stable_log_weight)
-        normalized_weight = weight / torch.sum(weight, 1).unsqueeze(1)
-
-        loss = - \
-            torch.mean(torch.sum(normalized_weight.detach() * log_weight, 1), 0)
-        return loss
 
     def get_elbo_loss(self, data):
         assert self.reparam is True, 'Reparam must be on for elbo loss'
@@ -405,7 +435,9 @@ class ProbModelBaseClass(nn.Module):
         return loss
 
     def get_tvo_loss(self, data):
-        assert self.reparam is False, 'Reparam must be off for tvo loss'
+        if self.args.loss != 'tvo_reparam':
+            assert self.reparam is False, 'Reparam must be off for TVO loss'
+
         self.set_internals(data, self.args.S)
 
         if self.args.per_sample:

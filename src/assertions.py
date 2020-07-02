@@ -1,59 +1,46 @@
 # Assertions
+
+SCHEDULES         = ['log', 'linear', 'moments']
+PARTITONS         = ['left','right','trapz']
+
+TVO_LOSSES        = ['tvo','tvo_reparam']
+DUAL_LOSSES       = ['wake-wake', 'wake-sleep', 'tvo_reparam', 'iwae_dreg']
+REQUIRES_REPARAM  = ['elbo', 'iwae', 'tvo_reparam', 'iwae_dreg']
+ALL_LOSSES        = REQUIRES_REPARAM + ['reinforce','tvo', 'vimco','wake-wake','wake-sleep']
+
+DISCRETE_MODELS   = ['discrete_vae','pcfg']
+CONTINUOUS_MODELS = ['continuous_vae', 'bnn']
+ALL_MODELS        = DISCRETE_MODELS + CONTINUOUS_MODELS
+
+BINARIZED_DATASETS = ['binarized_mnist','binarized_omniglot']
+ALL_DATASETS       = BINARIZED_DATASETS + ['fashion_mnist','mnist','kuzushiji_mnist','omniglot']
+PCFGS             = ['astronomers', 'brooks', 'minienglish', 'polynomial', 'quadratic', 'sids']
+
 def validate_hypers(args):
-    assert args.schedule in [
-        'log',
-        'linear',
-        'moments'], f"schedule cannot be {args.schedule}"
+    assert args.schedule in SCHEDULES, f"schedule cannot be {args.schedule}"
+    assert args.integration in PARTITONS, f"integration cannot be {args.integration}"
+    assert args.loss in ALL_LOSSES, f"loss cannot be {args.loss} "
+    assert args.model_name in ALL_MODELS, f" model cannot be {args.model}"
+    assert args.dataset in ALL_DATASETS, f" dataset cannot be {args.dataset} "
 
-    assert args.integration in [
-        'left',
-        'right',
-        'trap',
-        'single'], f"integration cannot be {args.integration}"
-
-    assert args.loss in [
-        'reinforce',
-        'elbo',
-        'iwae',
-        'tvo',
-        'vimco',
-        'wake-wake',
-        'wake-sleep'], f"loss cannot be {args.loss} "
-
-    assert args.learning_task in [
-        'continuous_vae',
-        'discrete_vae'], f" learning_task cannot be {args.learning_task}"
-
-    assert args.dataset in [
-        'fashion_mnist',
-        'mnist',
-        'kuzushiji_mnist',
-        'omniglot',
-        'binarized_mnist',
-        'binarized_omniglot'], f" dataset cannot be {args.dataset} "
+    if args.model_name in DISCRETE_MODELS:
+        assert args.loss not in REQUIRES_REPARAM, f"loss can't be {args.loss} with {args.model_name}"
 
     if args.schedule != 'log':
-        assert args.loss == 'tvo', f"{args.loss} doesn't require a partition schedule scheme"
+        assert args.loss in TVO_LOSSES, f"{args.loss} doesn't require a partition schedule scheme"
 
-    if args.learning_task in ['discrete_vae']:
-        assert args.loss not in [
-            'elbo', 'iwae'], f"loss can't be {args.loss} with {args.learning_task}"
+    if args.model_name == 'discrete_vae':
+        assert args.dataset in BINARIZED_DATASETS, f" dataset cannot be {args.dataset} with {args.model_name}"
 
-    if args.learning_task == 'discrete_vae':
-        assert args.dataset in ['binarized_mnist', 'binarized_omniglot'], \
-            f" dataset cannot be {args.dataset} with {args.learning_task}"
-
-    if args.loss in ['wake-wake', 'wake-sleep']:
+    if args.loss in DUAL_LOSSES:
         assert not args.save_grads, 'Grad variance not able to handle duel objective methods yet'
-
-    # Add an assertion everytime you catch yourself making a silly hyperparameter mistake so it doesn't happen again
 
 
 def validate_dataset_path(args):
-    learning_task = args.learning_task
+    model_name = args.model_name
     dataset = args.dataset
 
-    if learning_task in ['discrete_vae', 'continuous_vae']:
+    if model_name in ['discrete_vae', 'continuous_vae']:
         if dataset == 'fashion_mnist':
             data_path = args.data_dir + '/fashion_mnist.pkl'
         elif dataset == 'mnist':

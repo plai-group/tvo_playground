@@ -2,12 +2,17 @@
 clean tvo code to begin new research
 
 ## todo
- - test moments
- - test dreg
- - test bnn
- - test pcfg
- - convert to wandb
- - test all baseline losses
+ - [x] test moments
+ - [x] test dreg
+ - [x] test iwae
+ - [x] test iwae_dreg
+ - [ ] test bnn
+ - [ ] test pcfg
+ - [ ] convert to wandb
+ - [ ] remove save datasets
+ - [ ] test all baseline losses
+ - [ ] standardize artifacts dir
+ - [ ] import base.py trick from bqd
 
 ### losses
 - tvo
@@ -15,6 +20,7 @@ clean tvo code to begin new research
 - reinforce
 - elbo
 - iwae
+- iwae dreg
 - vimco
 - wake-wake (ww)
 - wake-sleep (ws)
@@ -37,3 +43,7 @@ clean tvo code to begin new research
 - discrete vaes
 - bayesian neural networks (bnn)
 - probabilistic context free grammar (pcfg)
+
+
+question
+- per_batch and per_sample?

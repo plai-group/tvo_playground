@@ -98,10 +98,10 @@ def make_discrete_vae_data(args):
     return train_data_loader, test_data_loader
 
 def get_data(args):
-    if args.learning_task == 'continuous_vae':
+    if args.model_name == 'continuous_vae':
         return make_continuous_vae_data(args)
-    elif args.learning_task == 'discrete_vae':
+    elif args.model_name == 'discrete_vae':
         return make_discrete_vae_data(args)
     else:
         raise ValueError(
-            "{} is an invalid learning task".format(args.learning_task))
+            "{} is an invalid learning task".format(args.model_name))

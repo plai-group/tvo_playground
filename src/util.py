@@ -89,6 +89,58 @@ def _get_multiplier(partition, integration):
 
     return multiplier
 
+
+def get_tvo_components(log_weight, log_p, log_q, args, heated_normalized_weight=None):
+
+    partition = args.partition
+    num_particles = args.S
+    integration = args.integration
+
+    # feed heated_normalized_weight when doing importance resampling (due to uniform expectations at selected indices)
+    if heated_normalized_weight is None:
+
+        heated_log_weight = log_weight * partition
+        heated_normalized_weight = exponentiate_and_normalize(
+            heated_log_weight, dim=1)
+
+    log_p = log_p.unsqueeze(-1) if len(log_p.shape) < 3 else log_p
+    log_q = log_q.unsqueeze(-1) if len(log_q.shape) < 3 else log_q
+    thermo_logp = partition * log_p + \
+        (1 - partition) * log_q
+
+    snis_logw = heated_normalized_weight * log_weight
+    snis_detach = heated_normalized_weight.detach()
+
+    return snis_logw, thermo_logp, snis_detach
+
+
+def compute_tvo_reparam_loss(log_weight, log_p, log_q, args, return_full=False, amci=False):
+    num_particles = args.S
+
+    log_weight = log_weight.unsqueeze(-1) if len(
+        log_weight.shape) < 3 else log_weight
+
+    snis_logw, thermo_logp, snis_detach = get_tvo_components(
+        log_weight, log_p, log_q, args)
+
+    beta_one_minus = args.partition*(1-args.partition)
+
+    one_minus_two_beta = torch.ones_like(args.partition)-2*args.partition
+
+    tvo_reparam = beta_one_minus.squeeze()*torch.sum(snis_detach *
+                                                     (log_weight.detach(
+                                                     ) - torch.sum(snis_logw, dim=1, keepdim=True).detach())
+                                                     * (log_weight - torch.sum(snis_detach*log_weight, dim=1, keepdim=True)), dim=1) \
+        + one_minus_two_beta.squeeze() * torch.sum(snis_detach*log_weight, dim=1)
+
+    if return_full:
+        return -tvo_reparam
+    else:
+        multiplier = _get_multiplier(
+            args.partition, args.integration).squeeze()
+        return -torch.mean(torch.sum(multiplier*tvo_reparam, dim=1), dim=0)
+
+
 def compute_tvo_loss(log_weight, log_p, log_q, args):
     """Args:
         log_weight: tensor of shape [batch_size, num_particles]
@@ -100,28 +152,30 @@ def compute_tvo_loss(log_weight, log_p, log_q, args):
             see https://en.wikipedia.org/wiki/Partition_of_an_interval
         num_particles: int
         integration: left, right or trapz
-
     Returns:
         loss: scalar that we call .backward() on and step the optimizer.
         elbo: average elbo over data
-
     """
     partition = args.partition
     num_particles = args.S
     integration = args.integration
 
-    log_weight = log_weight.unsqueeze(-1)
+    log_weight = log_weight.unsqueeze(-1) if len(
+        log_weight.shape) < 3 else log_weight
 
     heated_log_weight = log_weight * partition
     heated_normalized_weight = exponentiate_and_normalize(
         heated_log_weight, dim=1)
 
-    thermo_logp = partition * log_p.unsqueeze(-1) + \
-        (1 - partition) * log_q.unsqueeze(-1)
+    log_p = log_p.unsqueeze(-1)
+    log_q = log_q.unsqueeze(-1)
+
+    thermo_logp = partition * log_p + \
+        (1 - partition) * log_q
 
     wf = heated_normalized_weight * log_weight
     w_detached = heated_normalized_weight.detach()
-    wf_detached = wf.detach()
+
     if num_particles == 1:
         correction = 1
     else:
@@ -141,8 +195,15 @@ def compute_tvo_loss(log_weight, log_p, log_q, args):
 
     return loss
 
+def compute_iwae_loss(log_weight, partition=None):
+    stable_log_weight = log_weight - \
+        torch.max(log_weight, 1)[0].unsqueeze(1)
+    weight = torch.exp(stable_log_weight)
+    normalized_weight = weight / torch.sum(weight, 1).unsqueeze(1)
 
-
+    loss = - \
+        torch.mean(torch.sum(normalized_weight.detach() * log_weight, 1), 0)
+    return loss
 
 def calculate_grad_variance(model, args):
     grad_var = AverageMeter()
