@@ -3,8 +3,7 @@ def validate_hypers(args):
     assert args.schedule in [
         'log',
         'linear',
-        'bq',
-        'auto_bq'], f"schedule cannot be {args.schedule}"
+        'moments'], f"schedule cannot be {args.schedule}"
 
     assert args.integration in [
         'left',
