@@ -1,13 +1,24 @@
 # tvo_playground
-clean tvo code to begin new research
+Clean slate to begin research on the thermodynamic variational objective. Not every permutation of model/loss/dataset has been tested, so expect a few bumps. `base.py` is where most of the training logic lives, and all new models should extend it to get access to the various losses.
+
+It uses [sacred](https://sacred.readthedocs.io/en/stable/) for its command line interface and [wandb](https://www.wandb.com/) for experiment tracking. All hyperparameters are defined in `my_config()` and are available on the commandline via:
+
+`python main.py with learning_task='continuous_vae' loss='tvo' lr=0.01 --unobserved`
+
+To save to your wandb database, drop the `--unobserved`:
+
+`python main.py with learning_task='continuous_vae' loss='tvo' lr=0.01`
+
+Only strings, floats, ints, lists, and dicts should be defined in `my_config()`, everything else (numpy arrays, pickles, etc) should be instantiated in `init()`.
+
 
 ## todo
  - [x] test moments
  - [x] test dreg
  - [x] test iwae
  - [x] test iwae_dreg
- - [ ] test bnn
- - [ ] test pcfg
+ - [x] test bnn
+ - [x] test pcfg
  - [x] convert to wandb
  - [x] remove save datasets
  - [x] test all baseline losses
@@ -32,6 +43,7 @@ clean tvo code to begin new research
 - omniglot
 - binarized mnist
 - binarized omniglot
+- pcfg
 
 ### schedules
 - log
@@ -43,7 +55,3 @@ clean tvo code to begin new research
 - discrete vaes
 - bayesian neural networks (bnn)
 - probabilistic context free grammar (pcfg)
-
-
-question
-- per_batch and per_sample?
