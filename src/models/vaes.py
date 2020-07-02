@@ -513,7 +513,7 @@ class DiscreteVAE(VAEBaseClass):
         else:
             return self.encoders[str(layer_idx)](previous_latent_layer * 2 - 1)
 
-    def get_encoder_latent_layer(self, layer_idx, previous_latent_layer=None):
+    def get_encoder_latent_layer(self, layer_idx, previous_latent_layer=None, stop_grads=False):
         # pylint: disable=no-value-for-parameter
         """Returns distribution for single latent layer.
 
@@ -521,8 +521,7 @@ class DiscreteVAE(VAEBaseClass):
             layer_idx: 0 means the layer furthest away from obs
             previous_latent_layer: tensor of shape [N, latent_dim]
                 (only applicable if layer_idx < num_stochastic_layers - 1)
-            obs: tensor of shape [N, batch_size] of values in {0, 1}
-                (only applicable if layer_idx = num_stochastic_layers - 1)
+            stop_grads: not used
 
         Returns: Normal distribution with event_shape [latent_dim]
             and batch_shape is [N]"""
