@@ -1,4 +1,5 @@
-from src.models.vaes import DiscreteVAE, ContinuousVAE
+from src.models.vae import ContinuousVAE
+from src.models.old.vaes import DiscreteVAE
 from src.models.bnn import BayesianNetwork
 from src.models.pcfg import PCFG
 from src.models.pcfg_util import read_pcfg

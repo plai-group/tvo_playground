@@ -35,52 +35,110 @@ def my_config():
     More complex objects are defined and manuipulated in the init() function
     and attached to the args object.
 
-    The ProbModelBaseClass object is stateful and contains self.args,
-    so hyperparameters are accessable to the model via self.args.hyper_param
+    The VAE or ProbModelBaseClass objects are stateful and contain self.args,
+    so hyperparameters are accessible to the model via self.args.hyper_param
     """
     # learning task
     model_name = 'continuous_vae'
     artifact_dir = './artifacts'
     data_dir = './data'
 
-    # Model
-    loss = 'elbo'
-    hidden_dim = 200  # Hidden dimension of middle NN layers in vae
-    latent_dim = 50  # Dimension of latent variable z
-    integration = 'left'
-    cuda = True
-    num_stochastic_layers = 1
-    num_deterministic_layers = 2
-    learn_prior = False
-    activation = None  # override Continuous VAE layers
-    iw_resample = False  # whether to importance resample TVO proposals (WIP)
 
-    # Hyper
-    K = 5
-    S = 10
-    lr = 0.001
-    log_beta_min = -1.09
-
-    # Scheduling
-    schedule = 'log'
-    schedule_update_frequency = 1  # if 0, initalize once and never update
-    per_sample = False # Update schedule for each sample
-    per_batch = False # schedule update per batch
-
-    # Recording
-    record = False
-    verbose = False
     dataset = 'mnist'
+    cuda = True
+    loss = 'elbo'
+    
 
-    # Training
-    seed            = 1
-    epochs          = 1000
-    batch_size      = 1000
+    ''' Importance Sampling Params
+        -------------------------- '''
+    K = 5 # number of betas # replace with T = 5?
+    S = 10 # number of AIS chains or importance samples # replace with N = 5?
+    K_per_chain = 1 # multi-sample TVO or AIS with IWAE K-sample energy
+
     valid_S         = 100
     test_S          = 5000
-    test_batch_size = 1
 
+    ''' Optimization Params
+        -------------------------- '''
     optimizer = "adam"
+    lr = 0.001
+    epochs          = 1000
+    batch_size      = 1000
+    test_batch_size = 1
+    seed            = 1
+
+    # for selective optimization of named parameters (i.e. [ param if phi_tag in param.name() for param in model.parameters() ] )
+    phi_tag = 'encoder'
+    theta_tag = 'decoder'
+
+
+   ''' Architecture (Proposed) 
+    ------------
+    config:  'config.py'  # config file for architecture'''
+
+    include_old_args = True
+    # various (mostly architecture) args to be replaced
+    if incl_old_args:
+
+        hidden_dim = 200  # (prev: # Hidden dimension of middle NN layers in vae) 
+        latent_dim = 50  # Dimension of latent variable z
+        activation = None  # override Continuous VAE layers
+
+        num_stochastic_layers = 1
+        num_deterministic_layers = 2
+
+        # should incorporate normalizing flow or Vamp prior
+        learn_prior = False
+
+
+        ''' Needs further infrastructure since UB (reverse) should sample from p(x,z)'''
+        integration = 'left' # direction = 'fwd' / 'rev'.   
+
+
+        iw_resample = False # never worked.  may consider operators which resample z_t according to chain weights
+
+    
+    ''' Flow Specification
+    -------------------
+        TO DO : absorb into architecture config
+            --- would allow each flow to have its own arguments
+    '''
+
+    flows_per_beta = 2 # several flow transforms per π_β? 
+    hidden_per_made_flow = 10*latent_dim
+    linear_flow = None #'permute' # 'lu', etc.  (dims need to be consistent to eval Π q(z_j|x))
+    spline_bins = 10
+
+
+
+    ''' TVO Scheduling
+        -------------- '''
+    schedule = 'log'
+    log_beta_min = -1.7 # defaults for log_uniform schedule
+    beta_min = 0.02
+
+    schedule_update_frequency = 1  # update every n epochs, (if 0, never update)
+    
+    if incl_old_args:
+        # TO DO: revisit rescheduling schemes
+        per_sample = False # Update schedule for each sample
+        per_batch = False # schedule update per batch
+
+
+
+   ''' AIS Parameters
+        -------------- '''
+    q = 1 # geometric path
+
+
+
+
+
+    ''' Checkpointing / Testing / Recording
+        ----------------------------------- '''
+    record = False
+    verbose = False
+
     checkpoint_frequency = int(epochs / 5)
     checkpoint = False
     checkpoint = checkpoint if checkpoint_frequency > 0 else False
@@ -91,8 +149,7 @@ def my_config():
     train_only = False
     save_grads = False
 
-    phi_tag = 'encoder'
-    theta_tag = 'decoder'
+
 
 
     if model_name == 'discrete_vae':
