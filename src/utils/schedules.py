@@ -1,8 +1,41 @@
 import torch
 from functools import partial
 import numpy as np
-from src.util import calc_exp
-from src.util import get_total_log_weight
+from src.utils.record_utils import calc_exp
+
+
+
+def get_partition(args):
+    """Create a non-decreasing sequence of values between zero and one.
+    See https://en.wikipedia.org/wiki/Partition_of_an_interval.
+
+    Args:
+        args.num_partitions: length of sequence minus one
+        args.schedule: \'linear\' or \'log\'
+        args.log_beta_min: log (base ten) of beta_min. only used if partition_type
+            is log. default -10 (i.e. beta_min = 1e-10).
+        args.device: torch.device object (cpu by default)
+
+    Returns: tensor of shape [num_partitions + 1]
+    """
+    if args.K == 1:
+        partition = tensor((0., 1), args)
+    else:
+        if args.schedule == 'linear':
+            partition = torch.linspace(0, 1, steps=args.K + 1,
+                                       device=args.device)
+        elif args.schedule == 'log':
+            partition = torch.zeros(args.K + 1, device=args.device,
+                                    dtype=torch.float)
+            partition[1:] = torch.logspace(args.log_beta_min, 0, steps=args.K, device=args.device,
+                                           dtype=torch.float)
+        else:
+            # DEFAULT IS TO START WITH LOG
+            partition = torch.zeros(args.K + 1, device=args.device,
+                                    dtype=torch.float)
+            partition[1:] = torch.logspace(args.log_beta_min, 0, steps=args.K, device=args.device,
+                                           dtype=torch.float)
+    return partition
 
 def get_partition_scheduler(args):
     """
@@ -34,7 +67,7 @@ def moments(model, args=None, **kwargs):
     threshold = 0.05
 
     if not args.per_sample and not args.per_batch:
-        log_iw = get_total_log_weight(model, args, args.valid_S)
+        log_iw = model.get_total_log_weight(args, args.valid_S)
     else:
         log_iw = model.elbo()
 
@@ -96,3 +129,44 @@ def beta_id(model, args = None, **kwargs):
     dummy beta update for static / unspecified partition_types
     """
     return args.partition
+
+
+def get_tvo_multipliers(partition, integration = 'left'):
+    """ Outputs partition multipers depending on integration rule
+     Args:
+         partition = partition of interval [0,1]
+         integration : left, right, trapz, single (i.e. 1 * partition[*, 1])
+
+        (helper function to accomodate per_sample calculations)
+
+     Returns: tensor with size = partition.shape
+     """
+    integration = 'left' if integration is None else integration
+    if len(partition.shape) == 1:
+        multiplier = torch.zeros_like(partition)
+        if integration == 'trap':
+            multiplier[0] = 0.5 * (partition[1] - partition[0])
+            multiplier[1:-1] = 0.5 * (partition[2:] - partition[0:-2])
+            multiplier[-1] = 0.5 * (partition[-1] - partition[-2])
+        elif integration == 'left':
+            multiplier[:-1] = partition[1:] - partition[:-1]
+        elif integration == 'right':
+            multiplier[1:] = partition[1:] - partition[:-1]
+
+    else:
+        multiplier = torch.zeros_like(partition)
+        if integration == 'trap':
+            multiplier[..., 0] = 0.5 * (partition[..., 1] - partition[..., 0])
+            multiplier[..., 1:-1] = 0.5 * (partition[..., 2:] - partition[..., 0:-2])
+            multiplier[..., -1] = 0.5 * (partition[..., -1] - partition[..., -2])
+        elif integration == 'left':
+            multiplier[..., :-1] = partition[..., 1:] - partition[..., :-1]
+        elif integration == 'right':
+            multiplier[..., 1:] = partition[..., 1:] - partition[..., :-1]
+        elif integration == 'single':
+            multiplier = torch.ones_like(partition)
+            if multiplier.shape[-1] == 3:
+                multiplier[..., 0] = 0
+                multiplier[..., -1] = 0
+
+    return multiplier

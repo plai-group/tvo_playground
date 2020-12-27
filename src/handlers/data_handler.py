@@ -3,7 +3,7 @@ import logging
 import numpy as np
 from pathlib import Path
 import torch.utils.data
-from src.ml_helpers import tensor, get_data_loader
+from src.handlers.ml_helpers import tensor, get_data_loader
 from src.models.pcfg import GenerativeModel as PCFGGenerativeModel
 from src.models.pcfg_util import read_pcfg
 from torchvision import datasets, transforms

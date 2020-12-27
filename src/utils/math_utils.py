@@ -8,6 +8,19 @@ from torch.distributions.normal import Normal
 from torch.autograd import Variable
 
 
+def get_total_log_weight(model, args, S):
+    # should this be in model class?
+    with torch.no_grad():
+        log_weight = []
+        for obs in args.train_data_loader:
+            model.set_internals(obs, S)
+            elbo = model.elbo()
+            log_weight.append(elbo)
+
+        log_weight = torch.cat(log_weight)
+
+    return log_weight
+
 
 def singleton_repeat(x, n, sheldon_repeat=True):
     """ 

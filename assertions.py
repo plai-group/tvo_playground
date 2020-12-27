@@ -1,5 +1,5 @@
 from pathlib import Path
-from src.ml_helpers import detect_cuda
+from src.handlers.ml_helpers import detect_cuda
 # Assertions
 
 SCHEDULES = ['log', 'linear', 'moments']

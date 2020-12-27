@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import src.models.pcfg_util as util
 from torch.distributions import *
-from src.models.base import ProbModelBaseClass
+from src.models.old_vae.base import ProbModelBaseClass
 import numpy as np
 
 

@@ -10,11 +10,15 @@ import torch
 import wandb
 from sacred import Experiment
 
-import src.ml_helpers as mlh
-from src import assertions, util
-from src.data_handler import get_data
-from src.models import schedules
-from src.models.model_handler import get_model
+import src.handlers.ml_helpers as mlh
+import assertions
+from src.utils import schedules
+#from src.models import schedules
+
+
+#from src import assertions, util
+from src.handlers.data_handler import get_data
+from src.handlers.model_handler import get_model
 
 # Use sacred for command line interface + hyperparams
 # Use wandb for experiment tracking
@@ -61,7 +65,7 @@ def my_config():
     ''' Optimization Params
         -------------------------- '''
     optimizer = "adam"
-    lr = 0.001
+    lr  =   0.001
     epochs          = 1000
     batch_size      = 1000
     test_batch_size = 1
@@ -72,7 +76,7 @@ def my_config():
     theta_tag = 'decoder'
 
 
-   ''' Architecture (Proposed) 
+    ''' Architecture (Proposed) 
     ------------
     config:  'config.py'  # config file for architecture'''
 
@@ -126,7 +130,7 @@ def my_config():
 
 
 
-   ''' AIS Parameters
+    ''' AIS Parameters
         -------------- '''
     q = 1 # geometric path
 
@@ -196,13 +200,16 @@ def init(config, run):
     args.wandb = wandb
 
     # init scheduler
-    args.partition_scheduler = schedules.get_partition_scheduler(args)
-    args.partition = util.get_partition(args)
+    args.partition_scheduler = schedules.get_scheduling_fn(args)
+    args.partition = schedules.get_initial_partition(args)
 
     # init data
     train_data_loader, test_data_loader = get_data(args)
     args.train_data_loader = train_data_loader
     args.test_data_loader = test_data_loader
+
+    # ******** double check ***********
+    args.input_dim = train_data_loader.dataset.image.shape[1]
 
     # init model
     model = get_model(train_data_loader, args)

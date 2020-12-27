@@ -1,13 +1,13 @@
 from torch import nn
-from src import ml_helpers as mlh
+from src.handlers import ml_helpers as mlh
 from collections import defaultdict
 import numpy as np
 from tqdm import tqdm
 import torch
 
-from src.util import compute_tvo_loss, compute_wake_theta_loss, compute_wake_phi_loss, compute_vimco_loss, compute_tvo_reparam_loss, compute_iwae_loss
-from src import assertions
-from src import util
+from src.utils.util import compute_tvo_loss, compute_wake_theta_loss, compute_wake_phi_loss, compute_vimco_loss, compute_tvo_reparam_loss, compute_iwae_loss
+import assertions
+from src.utils import util
 
 
 class ProbModelBaseClass(nn.Module):

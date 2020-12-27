@@ -1,12 +1,12 @@
 # TO DO : import from flows configs.
-from src.configs.flows import *
-
+#from src.configs.flows import *
+from src.configs.ais import AISConfig1
 
 
 # class Architecture(object):
 #   def __init__(self, decoder_list, encoder_list):
 
-    
+
 {
   "decoder": [
     {"type": "fc", "dim": 256, "activation": "relu", "batch_norm": true},
@@ -24,6 +24,6 @@ from src.configs.flows import *
     {"type": "flatten"},
     {"type": "gaussian", "dim": 128}
   ],
-  "transforms": FlowExample,
+  "transforms": AISConfig1,
   "hidden_dim": 128
 }

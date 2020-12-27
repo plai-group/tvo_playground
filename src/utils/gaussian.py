@@ -39,7 +39,6 @@ def safe_encode(latents, size = None):
         return latents[:,:size], latents[:, size:]
 
 
-
 class GaussianEncoder(nn.Module):
     """Conditional Gaussian distribution, where the mean and variance are
     parametrized with neural networks."""
