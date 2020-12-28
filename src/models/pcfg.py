@@ -638,6 +638,7 @@ class PCFG(ProbModelBaseClass):
         return self._log_likelihood
 
     def train(self, data_loader, step=None):
+        assert False, 'needs to be updated for new baseclass structure'
         if self.dual_objective:
             train_logpx, train_elbo = self.train_dual_objectives(data_loader)
         else:

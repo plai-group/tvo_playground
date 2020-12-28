@@ -1,4 +1,5 @@
 from torch import nn
+import abc
 from src import ml_helpers as mlh
 from collections import defaultdict
 import numpy as np
@@ -27,9 +28,6 @@ class ProbModelBaseClass(nn.Module):
         self.D = D
         self.args = args
 
-        self.hist = defaultdict(list)
-        self.record_results = defaultdict(mlh.AverageMeter)
-
         if self.args.loss in assertions.REQUIRES_REPARAM:
             print("Reparam turned: ON")
             self.reparam = True
@@ -42,24 +40,30 @@ class ProbModelBaseClass(nn.Module):
         self.y = None  # Labels
         self.z = None  # Latent samples
 
-        if self.args.loss in assertions.DUAL_LOSSES:
-            self.dual_objective = True
-        else:
-            self.dual_objective = False
+        # for dual losses and optimizers, the convention is [theta, phi]
+        self.losses = {
+            'reinforce'  : [self.get_reinforce_loss],
+            'elbo'       : [self.get_elbo_loss],
+            'iwae'       : [self.get_iwae_loss],
+            'tvo'        : [self.get_tvo_loss],
+            'vimco'      : [self.get_vimco_loss],
+            'tvo_reparam': [self.get_tvo_loss, self.get_tvo_reparam_loss],       # theta optimized using tvo,  phi using tvo_reparam
+            'iwae_dreg'  : [self.get_iwae_loss, self.get_iwae_dreg_loss],        # theta optimized using IWAE, phi using IWAE_reparam
+            'wake-sleep' : [self.get_wake_theta_loss, self.get_sleep_phi_loss],  # theta optimized using wake, phi using sleep
+            'wake-wake'  : [self.get_wake_theta_loss, self.get_wake_phi_loss],   # theta optimized using wake, phi using wake
+        }
+
+        assert self.args.loss in self.losses.keys(), f"Invalid loss! Must be in {self.losses.keys()}."
 
         self.optimizer  = None
-        self.optimizer_phi_only   = None
-        self.optimizer_theta_only = None
+        self.loss = self.losses[self.args.loss]
 
 
-    def __iter__(self):
-        for attr, value in self.__dict__.items():
-            yield attr, value
-
-    # For debugging
-    def show_state(self):
-        for a in self:
-            print(a)
+    # ============================================================
+    # ---------- Override these functions in the subclass --------
+    # (the only functions that are required to be overwritten are
+    # indicated with the @abc.abstractmethod decorator)
+    # ============================================================
 
     def elbo(self):
         """
@@ -68,21 +72,18 @@ class ProbModelBaseClass(nn.Module):
         self.check_internals()
         return self.log_joint() - self.log_guide()
 
-    def set_internals(self, data, S):
-        """
-        Implemented by subclass
+    def record(self):
+        # save stuff during the epoch using
+        # self.args.wandb (overwrite in baseclass)
+        if self.args.record:
+            pass
 
-        This sets the internal state variables so all the functions work
-
-        Raises:
-            NotImplementedError: [description]
-        """
-        raise NotImplementedError
 
     def check_internals(self):
         """Verify internal state variables have been set.
          - False means not used,
          - None means error
+
         """
         assert self.x is not None, "self.x not set"
         assert self.y is not None, "self.y not set"
@@ -98,15 +99,29 @@ class ProbModelBaseClass(nn.Module):
             NotImplementedError: [description]
         """
         self.check_internals()
-        prior = self.log_prior()
-        likelihood = self.log_likelihood()
-        if prior.ndim == 1:
+        log_prior = self.log_prior()
+        log_likelihood = self.log_likelihood()
+        if log_prior.ndim == 1:
             N = self.x.shape[0]
-            prior = (1 / N) * prior.unsqueeze(0).repeat(N, 1)
-            return likelihood + (1 / self.args.batch_size) * prior
-        else:
-            return prior + likelihood
+            log_prior = mlh.spread(log_prior, N) # [1, S] -> [N, S]
 
+        return log_prior + log_likelihood
+
+
+    @abc.abstractmethod
+    def set_internals(self, data, S):
+        """
+        Implemented by subclass
+
+        This sets the internal state variables so all the functions work
+
+        Raises:
+            NotImplementedError: [description]
+        """
+        assert isinstance(data, (tuple, list)), "Data must be a tuple (X,y) or (X, )"
+        return
+
+    @abc.abstractmethod
     def log_prior(self):
         """
         log p(z) or log p(θ), depending on
@@ -121,8 +136,9 @@ class ProbModelBaseClass(nn.Module):
         Raises:
             NotImplementedError: [description]
         """
-        raise NotImplementedError
+        return
 
+    @abc.abstractmethod
     def log_likelihood(self):
         """
         log p(x|z)
@@ -132,8 +148,9 @@ class ProbModelBaseClass(nn.Module):
         Raises:
             NotImplementedError: [description]
         """
-        raise NotImplementedError
+        return
 
+    @abc.abstractmethod
     def log_guide(self):
         """
         log q(z|x) or log q(z)
@@ -143,8 +160,9 @@ class ProbModelBaseClass(nn.Module):
         Raises:
             NotImplementedError: [description]
         """
-        raise NotImplementedError
+        return
 
+    @abc.abstractmethod
     def sample_latent(self, S):
         """
         Implemented by subclass
@@ -157,22 +175,84 @@ class ProbModelBaseClass(nn.Module):
         Raises:
             NotImplementedError: [description]
         """
-        raise NotImplementedError
+        return
 
-    def init_optimizer(self):
-        # Make optimizer
-        if self.dual_objective:
-            self.optimizer_phi_only = torch.optim.Adam(
-                (params for name, params in self.named_parameters() if self.args.phi_tag in name), lr=self.args.lr)
-            self.optimizer_theta_only = torch.optim.Adam(
-                (params for name, params in self.named_parameters() if self.args.theta_tag in name), lr=self.args.lr)
-        else:
-            self.optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr)
+    # ============================================
+    # ---------- Main train function -------------
+    # ============================================
+
+    def step_epoch(self, data_loader, **kwargs):
+        # wrap for progress bar if verbose flag is on
+        data_loader = tqdm(data_loader) if self.args.verbose else data_loader
+
+        train_logpx = 0
+        train_elbo = 0
+        for idx, data in enumerate(data_loader):
+            # this loop handles the single and double objective cases
+            # add new objectives into the self.losses dictionary
+            for loss_func, opt in zip(self.loss, self.optimizer):
+                opt.zero_grad()
+                loss = loss_func(data)
+                loss.backward()
+                opt.step()
+
+            # these are computed used a fixed valid_S so they are comparable across different sample sizes
+            logpx, elbo = self.get_test_metrics(data, self.args.valid_S)
+
+            # only does something if function is filled in by subclass
+            self.record()
+
+            train_logpx += logpx.item()
+            train_elbo += elbo.item()
+
+        train_logpx = train_logpx / len(data_loader)
+        train_elbo = train_elbo / len(data_loader)
+
+        return train_logpx, train_elbo
+
+    # ============================================
+    # ---------- Main test function --------------
+    # ============================================
+
+    def test(self, data_loader, **kwargs):
+        log_p_total = 0
+        kl_total = 0
+        num_data = 0
+        data_loader = tqdm(data_loader) if self.args.verbose else data_loader
+        with torch.no_grad():
+            for data in data_loader:
+                log_p, kl = self.get_log_p_and_kl(data, self.args.test_S)
+                log_p_total += torch.sum(log_p).item()
+                kl_total += torch.sum(kl).item()
+                num_data += data[0].shape[0]
+        return log_p_total / num_data, kl_total / num_data
 
 
     # ============================
     # ---------- Helpers ----------
     # ============================
+
+    def init_optimizer(self):
+        # Make optimizer, has to be called after subclass has been initialized
+        if len(self.loss) == 2:
+            theta_opt = torch.optim.Adam(
+                (params for name, params in self.named_parameters() if self.args.theta_tag in name), lr=self.args.lr)
+            phi_opt = torch.optim.Adam(
+                (params for name, params in self.named_parameters() if self.args.phi_tag in name), lr=self.args.lr)
+            self.optimizer = [theta_opt, phi_opt]
+        else:
+            self.optimizer = [torch.optim.Adam(self.parameters(), lr=self.args.lr)]
+
+    # For debugging
+    def show_state(self):
+        for a in self:
+            print(a)
+
+    def __iter__(self):
+        for attr, value in self.__dict__.items():
+            yield attr, value
+
+
     def get_test_metrics(self, data, S):
         """
         Computes logpx, test_elbo without
@@ -214,183 +294,9 @@ class ProbModelBaseClass(nn.Module):
 
         return log_p, kl
 
-    def record_artifacts(self, _run):
-        # need to find a better way to do this
-        pass
-
-    def save_record(self):
-        # need to find a better way to do this
-        pass
-
-    def step_epoch(self, data_loader, step=None):
-        data_loader = tqdm(data_loader) if self.args.verbose else data_loader
-        if self.dual_objective:
-            return self.train_dual_objectives(data_loader)
-        else:
-            return self.train_single_objective(data_loader)
-
-    def train_single_objective(self, data_loader):
-        train_logpx = 0
-        train_elbo = 0
-        for idx, data in enumerate(data_loader):
-            self.optimizer.zero_grad()
-
-            loss, logpx, elbo = self.forward(data)
-
-            loss.backward()
-            self.optimizer.step()
-
-            if self.args.record:
-                self.record_stats()
-
-            train_logpx += logpx.item()
-            train_elbo += elbo.item()
-
-        train_logpx = train_logpx / len(data_loader)
-        train_elbo = train_elbo / len(data_loader)
-
-        if self.args.record:
-            self.save_record()
-
-        return train_logpx, train_elbo
-
-    def train_dual_objectives(self, data_loader):
-        train_logpx = 0
-        train_elbo = 0
-        for idx, data in enumerate(data_loader):
-            self.optimizer_phi_only.zero_grad()
-            self.optimizer_theta_only.zero_grad()
-
-            if self.args.loss == 'tvo_reparam': # p optimized using tvo
-                wake_theta_loss = self.get_tvo_loss(data)
-            elif self.args.loss == 'iwae_dreg': # p optimized using IWAE (DReG update is only for q)
-                wake_theta_loss = self.get_iwae_loss(data)
-            elif self.args.loss in ['wake-wake', 'wake-sleep']:
-                wake_theta_loss = self.get_wake_theta_loss(data)
-            else:
-                raise ValueError(f"{self.args.loss} is an invalid loss")
-
-            wake_theta_loss.backward()
-            self.optimizer_theta_only.step()
-
-            if self.args.loss in ['tvo_reparam']:
-                sleep_phi_loss = self.get_tvo_reparam_loss(data)
-                sleep_phi_loss.backward()
-            elif self.args.loss == 'iwae_dreg':
-                sleep_phi_loss = self.get_iwae_dreg_loss(data)
-                sleep_phi_loss.backward()
-            elif self.args.loss == 'wake-sleep':
-                sleep_phi_loss = self.get_sleep_phi_loss(data)
-                sleep_phi_loss.backward()
-            elif self.args.loss == 'wake-wake':
-                wake_phi_loss = self.get_wake_phi_loss(data)
-                wake_phi_loss.backward()
-            else:
-                raise ValueError(f"{self.args.loss} is an invalid loss")
-
-            self.optimizer_phi_only.step()
-
-            logpx, elbo = self.get_test_metrics(data, self.args.valid_S)
-
-            if self.args.record:
-                self.record_stats()
-
-            train_logpx += logpx.item()
-            train_elbo += elbo.item()
-
-        if self.args.record:
-            self.save_record()
-
-        train_logpx = train_logpx / len(data_loader)
-        train_elbo = train_elbo / len(data_loader)
-
-        return train_logpx, train_elbo
-
-    def test(self, data_loader, step=None):
-        log_p_total = 0
-        kl_total = 0
-        num_data = 0
-        data_loader = tqdm(data_loader) if self.args.verbose else data_loader
-        with torch.no_grad():
-            for data in data_loader:
-                log_p, kl = self.get_log_p_and_kl(data, self.args.test_S)
-                log_p_total += torch.sum(log_p).item()
-                kl_total += torch.sum(kl).item()
-                num_data += data[0].shape[0]
-        return log_p_total / num_data, kl_total / num_data
-
-    def record_stats(self):
-        '''
-            Records (across β) : expectation / variance / 3rd / 4th derivatives
-                curvature, IWAE β estimator
-                intermediate TVO integrals (WIP)
-        '''
-
-        '''Possibility of different, standardized partition for evaluation?
-            - may run with record_partition specified or overall arg'''
-
-        # Always use validation sample size
-        S = self.args.valid_S
-
-        # Always use same partition grid for comparability
-        partition = mlh.tensor(np.linspace(0, 1.0, 101), args=self.args)
-
-        with torch.no_grad():
-            log_iw = self.elbo().unsqueeze(-1) if len(self.elbo().shape) < 3 else self.elbo()
-
-            heated_log_weight = log_iw * partition
-
-            snis = util.exponentiate_and_normalize(heated_log_weight, dim=1)
-
-            # Leaving open possibility of addl calculations on batch dim (mean = False)
-            tvo_expectations = util.calc_exp(
-                log_iw, partition, snis=snis, all_sample_mean=True)
-            tvo_vars = util.calc_var(
-                log_iw, partition, snis=snis, all_sample_mean=True)
-            tvo_thirds = util.calc_third(
-                log_iw, partition, snis=snis, all_sample_mean=True)
-            tvo_fourths = util.calc_fourth(
-                log_iw, partition, snis=snis, all_sample_mean=True)
-
-            curvature = tvo_thirds/(torch.pow(1+torch.pow(tvo_vars, 2), 1.5))
-            iwae_beta = torch.mean(torch.logsumexp(
-                heated_log_weight, dim=1) - np.log(S), axis=0)
-
-            # Using average meter
-            # torch.mean(tvo_expectations, dim=0)
-            self.record_results['tvo_exp'].step(tvo_expectations.cpu())
-            self.record_results['tvo_var'].step(tvo_vars.cpu())
-            self.record_results['tvo_third'].step(tvo_thirds.cpu())
-            self.record_results['tvo_fourth'].step(tvo_fourths.cpu())
-
-            # per sample curvature by beta (gets recorded as mean over batches)
-            self.record_results['curvature'].step(curvature.cpu())
-            # [K] length vector of MC estimators of log Z_β
-            self.record_results['iwae_beta'].step(iwae_beta.cpu())
-
     # ============================
     # ---------- Losses ----------
     # ============================
-
-    def forward(self, data):
-        assert isinstance(data, (tuple, list)), "Data must be a tuple (X,y) or (X, )"
-
-        if self.args.loss == 'reinforce':
-            loss = self.get_reinforce_loss(data)
-        elif self.args.loss == 'elbo':
-            loss = self.get_elbo_loss(data)
-        elif self.args.loss == 'iwae':
-            loss = self.get_iwae_loss(data)
-        elif self.args.loss == 'tvo':
-            loss = self.get_tvo_loss(data)
-        elif self.args.loss == 'vimco':
-            loss = self.get_vimco_loss(data)
-        else:
-            raise ValueError(f"{self.args.loss} is an invalid loss")
-
-        logpx, test_elbo = self.get_test_metrics(data, self.args.valid_S)
-        return loss, logpx, test_elbo
-
 
     def get_iwae_loss(self, data):
         '''
