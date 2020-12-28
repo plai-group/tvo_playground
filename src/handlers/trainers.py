@@ -2,7 +2,9 @@ from ..utils import losses
 import torch
 
 
-def train_epoch_dual_objective(model, data_loader, optimizer, args, record=False):
+def train_epoch_dual_objective(model, data_loader, optimizer = None, args = None, record=False):
+    optimizer = optimizer if optimizer is None else optimizer
+
     train_logpx = 0
     train_elbo = 0
     train_loss = 0
@@ -12,7 +14,7 @@ def train_epoch_dual_objective(model, data_loader, optimizer, args, record=False
         optimizer_theta.zero_grad()
     
         loss = model.forward(data, set_internals = True)
-        internals = model.internals
+        
         if args.loss == 'tvo_reparam': # p optimized using tvo
             theta_loss = losses.get_tvo_loss(internals)
         elif args.loss == 'tvo_q_only':

@@ -2,7 +2,7 @@
 import torch
 from torch import nn
 
-class FlowComposition(nn.Module): #transforms.Transform):
+class Composition(nn.Module): #transforms.Transform):
     '''Composes several transforms into one, in the order they are given.
 
         Inputs
@@ -28,7 +28,7 @@ class FlowComposition(nn.Module): #transforms.Transform):
         Args:
             
         """
-        super(FlowComposition, self).__init__()
+        super(Composition, self).__init__()
         self._transforms = nn.ModuleList(transforms)
 
 

@@ -14,7 +14,7 @@ class ProbModelBaseClass(nn.Module):
     def __init__(self, D, args):
         """Base class for probabilistic model.
             - Uses internal state to avoid having to pass data around
-            - self.set_internals(), self.log_guide(), self.log_prior(), self.sample_latent(),
+            - self.set_internals(), self.log_proposal(), self.log_prior(), self.sample_latent(),
               must be overwritten by subclass
 
         Args:
@@ -66,7 +66,7 @@ class ProbModelBaseClass(nn.Module):
         Returns: [N, S]
         """
         self.check_internals()
-        return self.log_joint() - self.log_guide()
+        return self.log_joint() - self.log_proposal()
 
     def set_internals(self, data, S):
         """
@@ -134,7 +134,7 @@ class ProbModelBaseClass(nn.Module):
         """
         raise NotImplementedError
 
-    def log_guide(self):
+    def log_proposal(self):
         """
         log q(z|x) or log q(z)
         Implemented by subclass
@@ -173,6 +173,8 @@ class ProbModelBaseClass(nn.Module):
     # ============================
     # ---------- Helpers ----------
     # ============================
+
+
     def get_test_metrics(self, data, S):
         """
         Computes logpx, test_elbo without
@@ -255,6 +257,9 @@ class ProbModelBaseClass(nn.Module):
         return train_logpx, train_elbo
 
     def train_dual_objectives(self, data_loader):
+
+        #return trainers.train_dual_objectives()
+
         train_logpx = 0
         train_elbo = 0
         for idx, data in enumerate(data_loader):
@@ -392,162 +397,162 @@ class ProbModelBaseClass(nn.Module):
         return loss, logpx, test_elbo
 
 
-    def get_iwae_loss(self, data):
-        '''
-        IWAE loss = log mean p(x,z) / q(z|x)
-        '''
-        assert self.reparam is True, 'Reparam must be on for iwae loss'
-        self.set_internals(data, self.args.S)
-        log_weight = self.elbo()
-        return compute_iwae_loss(log_weight)
+    # def get_iwae_loss(self, data):
+    #     '''
+    #     IWAE loss = log mean p(x,z) / q(z|x)
+    #     '''
+    #     assert self.reparam is True, 'Reparam must be on for iwae loss'
+    #     self.set_internals(data, self.args.S)
+    #     log_weight = self.elbo()
+    #     return compute_iwae_loss(log_weight)
 
 
-    def get_iwae_dreg_loss(self, data):
-        assert self.reparam is True, 'Reparam must be on for iwae loss'
+    # def get_iwae_dreg_loss(self, data):
+    #     assert self.reparam is True, 'Reparam must be on for iwae loss'
 
-        #if self.args.stop_parameter_grad:
-        self.enable_stop_grads()
+    #     #if self.args.stop_parameter_grad:
+    #     self.enable_stop_grads()
 
-        self.set_internals(data, self.args.S)
+    #     self.set_internals(data, self.args.S)
 
-        log_weight = self.elbo()
+    #     log_weight = self.elbo()
 
-        normalized_weight = util.exponentiate_and_normalize(log_weight, dim=1)
+    #     normalized_weight = util.exponentiate_and_normalize(log_weight, dim=1)
 
-        loss = - \
-            torch.mean(torch.sum(torch.pow(normalized_weight,2).detach() * log_weight, 1), 0)
-        return loss
-
-
-    def get_elbo_loss(self, data):
-        assert self.reparam is True, 'Reparam must be on for elbo loss'
-        self.set_internals(data, self.args.S)
-
-        log_weight = self.elbo()
-        train_elbo = torch.mean(log_weight)
-
-        loss = -train_elbo
-        return loss
-
-    def get_reinforce_loss(self, data):
-        assert self.reparam is False, 'Reparam must be off for reinforce loss'
-        self.set_internals(data, self.args.S)
-
-        log_weight = self.elbo()
-        log_q = self.log_guide()
-
-        reinforce = log_weight.detach() * log_q + log_weight
-
-        loss = -torch.mean(reinforce)
-        return loss
-
-    def get_tvo_loss(self, data):
-        if self.args.loss != 'tvo_reparam':
-            assert self.reparam is False, 'Reparam must be off for TVO loss'
-
-        self.set_internals(data, self.args.S)
-
-        if self.args.per_sample:
-            self.args.partition = self.args.partition_scheduler(self, self.args)
-
-        log_weight = self.elbo()
-        log_joint = self.log_joint()
-        log_guide = self.log_guide()
-        loss = compute_tvo_loss(log_weight, log_joint, log_guide, self.args)
-
-        return loss
-
-    def get_tvo_reparam_loss(self, data):
-        assert self.reparam is True, 'Reparam must be ON for TVO reparam'
-
-        # used to prevent score function gradients
-        self.enable_stop_grads()
-
-        self.set_internals(data, self.args.S)
-
-        if self.args.per_sample or self.args.per_batch:
-            self.args.partition = self.args.partition_scheduler(self, self.args)
-
-        log_weight = self.elbo()
-        log_joint = self.log_joint()
-        log_guide = self.log_guide()
-
-        loss = compute_tvo_reparam_loss(log_weight, log_joint, log_guide, self.args)
-
-        return loss
+    #     loss = - \
+    #         torch.mean(torch.sum(torch.pow(normalized_weight,2).detach() * log_weight, 1), 0)
+    #     return loss
 
 
-    def get_wake_theta_loss(self, data):
-        """Scalar that we call .backward() on and step the optimizer.
+    # def get_elbo_loss(self, data):
+    #     assert self.reparam is True, 'Reparam must be on for elbo loss'
+    #     self.set_internals(data, self.args.S)
 
-        Args:
-            generative_model: models.GenerativeModel object
-            inference_network: models.InferenceNetwork object
-            obs: tensor of shape [batch_size]
-            num_particles: int
+    #     log_weight = self.elbo()
+    #     train_elbo = torch.mean(log_weight)
 
-        Returns:
-            loss: scalar that we call .backward() on and step the optimizer.
-            elbo: average elbo over data
-        """
-        assert self.reparam is False, 'Reparam must be off for wake_theta_loss'
-        self.set_internals(data, self.args.S)
+    #     loss = -train_elbo
+    #     return loss
 
-        log_weight = self.elbo()
-        return compute_wake_theta_loss(log_weight)
+    # def get_reinforce_loss(self, data):
+    #     assert self.reparam is False, 'Reparam must be off for reinforce loss'
+    #     self.set_internals(data, self.args.S)
 
-    def get_wake_phi_loss(self, data):
-        """
-        Args:
-            generative_model: models.GenerativeModel object
-            inference_network: models.InferenceNetwork object
-            obs: tensor of shape [batch_size]
-            num_particles: int
+    #     log_weight = self.elbo()
+    #     log_q = self.log_proposal()
 
-        Returns:
-            loss: scalar that we call .backward() on and step the optimizer.
-        """
-        assert self.reparam is False, 'Reparam must be off for wake_phi_loss'
-        self.set_internals(data, self.args.S)
+    #     reinforce = log_weight.detach() * log_q + log_weight
 
-        log_weight = self.elbo()
-        log_q = self.log_guide()
-        return compute_wake_phi_loss(log_weight, log_q)
+    #     loss = -torch.mean(reinforce)
+    #     return loss
 
-    def get_sleep_phi_loss(self, data):
-        """Returns:
-        loss: scalar that we call .backward() on and step the optimizer.
-        """
-        assert self.reparam is False, 'Reparam must be off for sleep_loss'
-        self.set_internals(data, self.args.S)
-        log_q = self.log_guide()
-        return -torch.mean(log_q)
+    # def get_tvo_loss(self, data):
+    #     if self.args.loss != 'tvo_reparam':
+    #         assert self.reparam is False, 'Reparam must be off for TVO loss'
 
-    def get_vimco_loss(self, data):
-        """Almost twice faster version of VIMCO loss (measured for batch_size = 24,
-        num_particles = 1000). Inspired by Adam Kosiorek's implementation.
+    #     self.set_internals(data, self.args.S)
 
-        Args:
-            generative_model: models.GenerativeModel object
-            inference_network: models.InferenceNetwork object
-            obs: tensor of shape [batch_size]
-            num_particles: int
+    #     if self.args.per_sample:
+    #         self.args.partition = self.args.partition_scheduler(self, self.args)
 
-        Returns:
+    #     log_weight = self.elbo()
+    #     log_joint = self.log_joint()
+    #     log_proposal = self.log_proposal()
+    #     loss = compute_tvo_loss(log_weight, log_joint, log_proposal, self.args)
 
-            loss: scalar that we call .backward() on and step the optimizer.
-            elbo: average elbo over data
-        """
-        assert self.reparam is False, 'Reparam must be off for vimco_loss'
-        self.set_internals(data, self.args.S)
+    #     return loss
 
-        # assert self.reparam is True, 'Reparam must be on for wake_phi_loss'
-        log_weight = self.elbo()
-        log_q = self.log_guide()
-        return compute_vimco_loss(log_weight, log_q)
+    # def get_tvo_reparam_loss(self, data):
+    #     assert self.reparam is True, 'Reparam must be ON for TVO reparam'
 
-    def get_concrete_loss(self, data):
-        raise NotImplementedError
+    #     # used to prevent score function gradients
+    #     self.enable_stop_grads()
 
-    def get_relax_loss(self, data):
-        raise NotImplementedError
+    #     self.set_internals(data, self.args.S)
+
+    #     if self.args.per_sample or self.args.per_batch:
+    #         self.args.partition = self.args.partition_scheduler(self, self.args)
+
+    #     log_weight = self.elbo()
+    #     log_joint = self.log_joint()
+    #     log_proposal = self.log_proposal()
+
+    #     loss = compute_tvo_reparam_loss(log_weight, log_joint, log_proposal, self.args)
+
+    #     return loss
+
+
+    # def get_wake_theta_loss(self, data):
+    #     """Scalar that we call .backward() on and step the optimizer.
+
+    #     Args:
+    #         generative_model: models.GenerativeModel object
+    #         inference_network: models.InferenceNetwork object
+    #         obs: tensor of shape [batch_size]
+    #         num_particles: int
+
+    #     Returns:
+    #         loss: scalar that we call .backward() on and step the optimizer.
+    #         elbo: average elbo over data
+    #     """
+    #     assert self.reparam is False, 'Reparam must be off for wake_theta_loss'
+    #     self.set_internals(data, self.args.S)
+
+    #     log_weight = self.elbo()
+    #     return compute_wake_theta_loss(log_weight)
+
+    # def get_wake_phi_loss(self, data):
+    #     """
+    #     Args:
+    #         generative_model: models.GenerativeModel object
+    #         inference_network: models.InferenceNetwork object
+    #         obs: tensor of shape [batch_size]
+    #         num_particles: int
+
+    #     Returns:
+    #         loss: scalar that we call .backward() on and step the optimizer.
+    #     """
+    #     assert self.reparam is False, 'Reparam must be off for wake_phi_loss'
+    #     self.set_internals(data, self.args.S)
+
+    #     log_weight = self.elbo()
+    #     log_q = self.log_proposal()
+    #     return compute_wake_phi_loss(log_weight, log_q)
+
+    # def get_sleep_phi_loss(self, data):
+    #     """Returns:
+    #     loss: scalar that we call .backward() on and step the optimizer.
+    #     """
+    #     assert self.reparam is False, 'Reparam must be off for sleep_loss'
+    #     self.set_internals(data, self.args.S)
+    #     log_q = self.log_proposal()
+    #     return -torch.mean(log_q)
+
+    # def get_vimco_loss(self, data):
+    #     """Almost twice faster version of VIMCO loss (measured for batch_size = 24,
+    #     num_particles = 1000). Inspired by Adam Kosiorek's implementation.
+
+    #     Args:
+    #         generative_model: models.GenerativeModel object
+    #         inference_network: models.InferenceNetwork object
+    #         obs: tensor of shape [batch_size]
+    #         num_particles: int
+
+    #     Returns:
+
+    #         loss: scalar that we call .backward() on and step the optimizer.
+    #         elbo: average elbo over data
+    #     """
+    #     assert self.reparam is False, 'Reparam must be off for vimco_loss'
+    #     self.set_internals(data, self.args.S)
+
+    #     # assert self.reparam is True, 'Reparam must be on for wake_phi_loss'
+    #     log_weight = self.elbo()
+    #     log_q = self.log_proposal()
+    #     return compute_vimco_loss(log_weight, log_q)
+
+    # def get_concrete_loss(self, data):
+    #     raise NotImplementedError
+
+    # def get_relax_loss(self, data):
+    #     raise NotImplementedError

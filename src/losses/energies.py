@@ -66,6 +66,10 @@ class InterpolatedEnergy(object):
         grad.requires_grad_()
         return grad, log_prob
 
+    def grad_and_log_prob(self, z, x = None, multi_sample = False):
+    	return self.grad(z, x, multi_sample)
+
+
 
 def q_mixture( z, x, log_pi0, log_pi1, beta, q):
 	''' ROB ATTEMPT using pytorch instead of np.logaddexp'''

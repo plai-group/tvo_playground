@@ -13,6 +13,7 @@ import torch.nn.functional as nnf
 from torch.distributions import Independent
 import numpy as np
 
+from src.models.base import ProbModelBaseClass
 
 from src.utils.math_utils import log_mean_exp, sum_except_batch, singleton_repeat
 from src.utils.losses import negative_bce
@@ -31,17 +32,19 @@ def safe_encode(latents, size = None):
         size = size if size is None else int(latents.shape[-1]/2)
         return latents[:,:size], latents[:, size:]
 
-class VAE(nn.Module):
+class VAE(ProbModelBaseClass):
 	'''
 	Should be expanded to FlowVAE and base class (e.g. with init_opt, get_total_log_weight, maybe step_epoch)
 	'''
 	def __init__(self, args):
-		
+		# TO DO: Change signature of ProbModelBaseClass init
+		super().__init__(args.input_dim, args)
+
 		self.args = args
 		
 		self.internals = SimpleNamespace()		
 		
-		# TO DO: Replace with flexible architecture
+		# TO DO: Replace with flexible architecture (see src/configs/architectures/vae_example.py)
 		self.hidden_layer_dim = args.hidden_dim
 
 		# Encoder (Replace with ConfigParser)
@@ -80,7 +83,7 @@ class VAE(nn.Module):
 		self.K = args.K
 		
 		self.partition = torch.tensor(get_partition(args)).cuda()    
-		super().__init__()
+		
 
 
 	def init_optimizer(self):
@@ -144,8 +147,6 @@ class VAE(nn.Module):
 			h2 = torch.tanh(self.enc2(h1))
 			h3 = torch.tanh(self.enc3(h2))
 
-
-
 		'''
 			TO DO : Change to accommodate GaussianEncoder (or something which returns a density function stop_grad(mu, logvar) for reparam gradients (i.e. ignoring score function) )
 		'''	
@@ -189,14 +190,41 @@ class VAE(nn.Module):
 		return torch.sigmoid(mean), self.recon_logvar
 
 
-	def set_internals(self, x, S = None):
-		self._set_internals(x, S)
-
 	def _set_internals(self, x, S = None):
 		S = S if S is not None else self.args.S 
 		_ = self.elbo(x, S, set_internals=True)
 
-	def elbo(self, x, num_chains=1, set_internals=False):#return_all=False,  #return_all = None
+    def set_internals(self, data, S=10):
+        self.y = False  # VAEs are unsupervised
+        self.x = data[0]
+        self.inf_network = self.get_inf_network()
+        if self.stop_grads:
+            # self.inf_network does the sampling and self.inf_network_detached does the scoring
+            self.inf_network_detached = self.get_inf_network(stop_grads=True)
+        self.z = self.sample_latent(S)
+        self.check_internals()
+
+    def enable_stop_grads(self):
+        self.stop_grads = True
+
+    def disable_stop_grads(self):
+        self.stop_grads = False
+
+    def enable_reparam(self):
+        self.reparam = True
+
+    def disable_reparam(self):
+        self.reparam = False
+
+
+    def sample_latent(self, S):
+    	# should rely on flows / AIS
+    	raise NotImplementedError
+
+
+
+
+	def elbo(self, x, S=1, set_internals=False):#return_all=False,  #return_all = None
 		
 		flattened_x = x.view(-1, self.args.input_dim)
 		
@@ -207,10 +235,10 @@ class VAE(nn.Module):
 			
 			mu, logvar = self.encode(flattened_x)
 
-			z, log_pz, log_prop = self._rsample(mu, logvar, num_chains)
+			z, log_pz, log_prop = self._rsample(mu, logvar, S)
 		else:
 
-			z, log_prop = self.encoder_flow.sample_and_log_prob(num_chains, \
+			z, log_prop = self.encoder_flow.sample_and_log_prob(S, \
 									context = flattened_x, \
 									return_all = return_all_layers)
 
@@ -227,14 +255,14 @@ class VAE(nn.Module):
 			x_mean = x_mean.view(-1, self.args.input_dim, args.K ) if return_all_layers else x_mean
 			x_logvar = x_logvar.view(-1, self.args.input_dim, args.K ) if x_logvar is not None else x_logvar
 
-		x_target = singleton_repeat(flattened_x, num_chains) 
+		x_target = singleton_repeat(flattened_x, S) 
 
 		x_target = x_target.unsqueeze(-1) if return_all_layers else x_target
 		#if len(x_target.shape) < len(x_mean.shape) else x_target
 		
 		log_lkd = self.observation_log_likelihood_fn( x_true = x_target, \
-														 x_pred = x_mean,
-														 x_logvar = x_logvar) #.view( num_chains, -1 )
+													 x_pred = x_mean,
+													 x_logvar = x_logvar) #.view( S, -1 )
 
 		elbo = log_lkd + log_pz - log_prop
 
@@ -254,12 +282,12 @@ class VAE(nn.Module):
 		return elbo
 
 
-	def forward(self, x, num_chains=None, set_internals = False, itr = None):
+	def forward(self, x, S=None, set_internals = False, itr = None):
 		
-		num_chains = num_chains if num_chains is not None else self.args.num_chains 
+		S = S if S is not None else self.args.S 
 		# RSAMPLE only done in GaussianDist / GaussianEncoder atm
 		
-		elbo = self.elbo(x, num_chains, set_internals= False, itr=itr) #set_internals)
+		elbo = self.elbo(x, S, set_internals= False, itr=itr) #set_internals)
 
 		if True:
 			return elbo

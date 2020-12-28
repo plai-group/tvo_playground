@@ -24,7 +24,7 @@ def negative_bce(x_true, x_pred, x_logvar=None, dim = 1):
         return - torch.sum(F.binary_cross_entropy(x_pred, x_true, reduction='none'), dim=dim)
 
 
-def tvo_loss(internals, args, partition = None):
+def tvo_loss(log_weights, args, partition = None):
     partition = partition if partition is not None else args.partition
     multiplier = get_tvo_multipliers (partition, args.integration)
     
@@ -34,7 +34,7 @@ def tvo_loss(internals, args, partition = None):
     IPython.embed()
 
 
-def iwae_loss(elbo, num_chains=None, dim = None):
+def iwae_loss(log_weights, num_chains=None, dim = None):
     if num_chains is None:
         dim = 0 if dim is None else dim
         return torch.mean( math_utils.log_mean_exp(elbo, dim = dim) )
