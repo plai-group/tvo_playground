@@ -18,7 +18,7 @@ from src.models.base import ProbModelBaseClass
 from src.utils.math_utils import log_mean_exp, sum_except_batch, singleton_repeat
 from src.utils.losses import negative_bce
 from src.utils.gaussian import log_normal_likelihood
-#from dists import GaussianDist, GaussianEncoder, LayeredTransform
+from dists.gaussian import GaussianDist, GaussianEncoder
 #from nflows import transforms, distributions, flows
 from src.utils.schedules import get_partition
 from types import SimpleNamespace
@@ -197,11 +197,15 @@ class VAE(ProbModelBaseClass):
     def set_internals(self, data, S=10):
         self.y = False  # VAEs are unsupervised
         self.x = data[0]
-        self.inf_network = self.get_inf_network()
-        if self.stop_grads:
-            # self.inf_network does the sampling and self.inf_network_detached does the scoring
-            self.inf_network_detached = self.get_inf_network(stop_grads=True)
+
+
+
+        # self.inf_network = self.get_inf_network()
+        # if self.stop_grads:
+        #     # self.inf_network does the sampling and self.inf_network_detached does the scoring
+        #     self.inf_network_detached = self.get_inf_network(stop_grads=True)
         self.z = self.sample_latent(S)
+
         self.check_internals()
 
     def enable_stop_grads(self):
@@ -219,7 +223,11 @@ class VAE(ProbModelBaseClass):
 
     def sample_latent(self, S):
     	# should rely on flows / AIS
-    	raise NotImplementedError
+    	self.encoder_dist = GaussianEncoder(self.encode).forward(self.x)
+    	# takes in ()
+    	self.encoder_density = self.encoder_dist.log_prob
+    	if self.stop_grads:
+    		self.encoder_density_detached = partial(self.encoder_dist.log_prob, stop_grad = True)
 
 
 

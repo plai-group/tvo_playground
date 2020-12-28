@@ -74,21 +74,6 @@ class GaussianEncoder(nn.Module):
         #eps = torch.randn_like(std)
         #return mu + std * eps
 
-    def stop_grad_density(self, x = None):
-        '''
-        in evaluating q_phi(z_t | x), we don't necessarily want to backprop thru mu, σ and phi
-        e.g. reparameterization or StL gradients avoid Tighter Bounds problem by d log q/d_phi terms
-        '''
-        if x is None:
-            mu, logvar = self.forward(x)
-        else:
-            mu, var = self.mu, self.logvar
-
-        mu = mu.detach()
-        logvar = logvar.detach()
-
-        return torch.distributions.Normal( mu, torch.exp(.5*logvar) )
-
     def sample_and_log_prob(self, x, S=1):
         z = self.conditional_sample(x, S)
 
@@ -100,9 +85,14 @@ class GaussianEncoder(nn.Module):
         log_prob = self.log_prob(z, mu, logvar)
         return z, log_prob
 
-    def log_prob(self, z, mu = None, logvar = None): 
+    def log_prob(self, z, mu = None, logvar = None, stop_grad = False): 
         mu = self.mu if mu is None else mu
         logvar = self.logvar if logvar is None else logvar
+
+        if stop_grad:
+            mu = mu.detach()
+            logvar = logvar.detach() 
+
         return log_normal_likelihood(z, mu, logvar, -1)
 
     def prior_kl(self, mu, logvar):

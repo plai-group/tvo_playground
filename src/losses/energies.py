@@ -1,8 +1,8 @@
-   
+
 '''https://github.com/vmasrani/alpha_ais/blob/master/src/hmc.py
 '''
 
-class InterpolatedEnergy(object):
+class InterpolatedDensity(object):
 	''' Parameters 
 	    ------------
 	    log_pi0 : function which takes (z, x) arguments

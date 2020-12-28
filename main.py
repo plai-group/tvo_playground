@@ -108,11 +108,15 @@ def my_config():
             --- would allow each flow to have its own arguments
     '''
 
-    flows_per_beta = 2 # several flow transforms per π_β? 
-    hidden_per_made_flow = 10*latent_dim
-    linear_flow = None #'permute' # 'lu', etc.  (dims need to be consistent to eval Π q(z_j|x))
-    spline_bins = 10
+    # flows_per_beta = 2 # several flow transforms per π_β? 
+    # hidden_per_made_flow = 10*latent_dim
+    # linear_flow = None #'permute' # 'lu', etc.  (dims need to be consistent to eval Π q(z_j|x))
+    # spline_bins = 10
 
+    mh = False
+    num_hmc = 5
+    num_leapfrog = 2
+    hmc_epsilon = 0.005
 
 
     ''' TVO Scheduling
