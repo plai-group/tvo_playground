@@ -8,17 +8,17 @@ from torch import nn
 
 class FCEncoder(nn.Module):
   def __init__(self, args):
+    super().__init__()
     self.args = args
 
-    self.layers = []
-    self.layers.append(nn.Linear(args.input_dim, args.hidden_layer_dim))
+    self.layers =  nn.ModuleList()
+    self.layers.append(nn.Linear(args.input_dim, args.hidden_dim))
     for i in range(args.num_deterministic_layers):
-      self.layers.append(nn.Linear(args.hidden_layer_dim, args.hidden_layer_dim))
-      self.layers.appned(nn.ReLU())
+      self.layers.append(nn.Linear(args.hidden_dim, args.hidden_dim))
+      self.layers.append(nn.ReLU())
 
-    self.layers.append(nn.Linear(args.hidden_layer_dim, args.latent_dim * 2))
+    self.layers.append(nn.Linear(args.hidden_dim, args.latent_dim * 2))
 
-    super().__init__()
 
   def forward(self, x):
     h = x
@@ -29,18 +29,19 @@ class FCEncoder(nn.Module):
 
 class FCDecoder(nn.Module):
   def __init__(self, args):
+    super().__init__()
     self.args = args
 
-    self.layers = []
-    self.layers.append(nn.Linear(args.latent_dim, args.hidden_layer_dim))
+    self.layers = nn.ModuleList()
+    self.layers.append(nn.Linear(args.latent_dim, args.hidden_dim))
     for i in range(args.num_deterministic_layers):
-      self.layers.append(nn.Linear(args.hidden_layer_dim, args.hidden_layer_dim))
-      self.layers.appned(nn.ReLU())
+      self.layers.append(nn.Linear(args.hidden_dim, args.hidden_dim))
+      self.layers.append(nn.ReLU())
 
-    self.layers.append(nn.Linear(args.hidden_layer_dim, args.input_dim))
+    self.layers.append(nn.Linear(args.hidden_dim, args.input_dim))
     self.layers.append(nn.Sigmoid())
 
-    super().__init__()
+   
 
   def forward(self, x):
     h = x

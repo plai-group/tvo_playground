@@ -1,4 +1,4 @@
-from ..utils import losses
+from src.losses import losses
 import torch
 
 

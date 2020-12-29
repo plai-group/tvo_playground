@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from src.handlers.ml_helpers import AverageMeter, get_grads, tensor, seed_all #lognormexp,
+from src.utils.ml_helpers import AverageMeter, get_grads, tensor, seed_all #lognormexp,
 from src.utils.math_utils import exponentiate_and_normalize 
 from torch.distributions.multinomial import Multinomial
 

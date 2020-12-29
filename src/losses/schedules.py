@@ -5,7 +5,7 @@ from src.utils.record_utils import calc_exp
 
 
 
-def get_partition(args):
+def get_initial_partition(args):
     """Create a non-decreasing sequence of values between zero and one.
     See https://en.wikipedia.org/wiki/Partition_of_an_interval.
 

@@ -10,15 +10,16 @@ import torch
 import wandb
 from sacred import Experiment
 
-import src.handlers.ml_helpers as mlh
+import src.utils.ml_helpers as mlh
 import assertions
-from src.utils import schedules
+from src.losses import schedules
 #from src.models import schedules
 
 
+import src.utils.record_utils as record_util
 #from src import assertions, util
-from src.handlers.data_handler import get_data
-from src.handlers.model_handler import get_model
+from src.utils.data_handler import get_data
+from src.utils.model_handler import get_model
 
 # Use sacred for command line interface + hyperparams
 # Use wandb for experiment tracking
@@ -43,7 +44,7 @@ def my_config():
     so hyperparameters are accessible to the model via self.args.hyper_param
     """
     # learning task
-    model_name = 'continuous_vae'
+    model_name = 'flow_vae' #'continuous_vae'
     artifact_dir = './artifacts'
     data_dir = './data'
 
@@ -80,9 +81,16 @@ def my_config():
     ------------
     config:  'config.py'  # config file for architecture'''
 
+    enc_architecture = 'vae_example.FCEncoder'
+    dec_architecture = 'vae_example.FCDecoder'
+    flow_block = 'hmc' #configs.flows:   flow_compositions.___?
+
+    prior_dist = 'gaussian.StandardNormal'
+    momentum_dist = 'gaussian.StandardNormal'
+
     include_old_args = True
     # various (mostly architecture) args to be replaced
-    if incl_old_args:
+    if include_old_args:
 
         hidden_dim = 200  # (prev: # Hidden dimension of middle NN layers in vae) 
         latent_dim = 50  # Dimension of latent variable z
@@ -108,16 +116,21 @@ def my_config():
             --- would allow each flow to have its own arguments
     '''
 
-    # flows_per_beta = 2 # several flow transforms per π_β? 
-    # hidden_per_made_flow = 10*latent_dim
-    # linear_flow = None #'permute' # 'lu', etc.  (dims need to be consistent to eval Π q(z_j|x))
-    # spline_bins = 10
-
+    # HMC Specific
     mh = False
     num_hmc = 5
     num_leapfrog = 2
     hmc_epsilon = 0.005
 
+    momentum_rescale = 1
+    rescale_strategy = 'fixed_quadratic'
+    beta_0 = 0.6666 # quadratic tempering (appears to be default https://github.com/anthonycaterini/hvae-nips/blob/a53e54b21ed75ca7a051a7f272ef89baf59488b9/mnist/main.py#L55)
+
+    # e.g. IAF Flows
+    # flows_per_beta = 2 # several flow transforms per π_β? 
+    # hidden_per_made_flow = 10*latent_dim
+    # linear_flow = None #'permute' # 'lu', etc.  (dims need to be consistent to eval Π q(z_j|x))
+    # spline_bins = 10
 
     ''' TVO Scheduling
         -------------- '''
@@ -127,17 +140,15 @@ def my_config():
 
     schedule_update_frequency = 1  # update every n epochs, (if 0, never update)
     
-    if incl_old_args:
+    if include_old_args:
         # TO DO: revisit rescheduling schemes
         per_sample = False # Update schedule for each sample
         per_batch = False # schedule update per batch
 
 
-
     ''' AIS Parameters
         -------------- '''
     q = 1 # geometric path
-
 
 
 
@@ -204,7 +215,7 @@ def init(config, run):
     args.wandb = wandb
 
     # init scheduler
-    args.partition_scheduler = schedules.get_scheduling_fn(args)
+    args.partition_scheduler = schedules.get_partition_scheduler(args)
     args.partition = schedules.get_initial_partition(args)
 
     # init data
@@ -243,7 +254,7 @@ def train(model, args):
 
         if mlh.is_gradient_time(epoch, args):
             # Save grads
-            grad_variance = util.calculate_grad_variance(model, args)
+            grad_variance = record_util.calculate_grad_variance(model, args)
             log_scalar(grad_variance=grad_variance, step=epoch)
 
         if mlh.is_test_time(epoch, args):

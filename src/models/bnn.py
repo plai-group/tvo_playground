@@ -10,11 +10,11 @@ import torch.nn.functional as F
 import torch.optim as optim
 from tqdm import tqdm, trange
 import pandas as pd
-from src.ml_helpers import duplicate, spread, get_unique_dir
+from src.utils.ml_helpers import duplicate, spread, get_unique_dir
 from src.models.base import ProbModelBaseClass
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
-import src.ml_helpers as mlh
+import src.utils.ml_helpers as mlh
 
 class Gaussian(object):
     def __init__(self, mu, rho, device):

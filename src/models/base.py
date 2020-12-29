@@ -1,13 +1,16 @@
 from torch import nn
-from src.handlers import ml_helpers as mlh
+from src.utils import ml_helpers as mlh
 from collections import defaultdict
 import numpy as np
 from tqdm import tqdm
 import torch
 
-from src.utils.util import compute_tvo_loss, compute_wake_theta_loss, compute_wake_phi_loss, compute_vimco_loss, compute_tvo_reparam_loss, compute_iwae_loss
+# remove manual imports here, remove get/compute redundancy ( i.e. build out src.losses )
+from src.losses.old_losses import compute_tvo_loss, compute_wake_theta_loss, compute_wake_phi_loss, compute_vimco_loss, \
+                                     compute_tvo_reparam_loss, compute_iwae_loss
 import assertions
-from src.utils import util
+from src.losses import old_losses
+import importlib 
 
 
 class ProbModelBaseClass(nn.Module):
@@ -169,6 +172,13 @@ class ProbModelBaseClass(nn.Module):
         else:
             self.optimizer = torch.optim.Adam(self.parameters(), lr=self.args.lr)
 
+    def import_config_object(self, name, module='src.configs.architectures', **kwargs):
+
+        prefix = ".".join(name.split(".")[:-1])
+        name = name.split(".")[-1]
+        module = importlib.import_module(module+'.'+prefix)
+        my_cls = getattr(module, name)
+        return my_cls(self.args, **kwargs)
 
     # ============================
     # ---------- Helpers ----------
@@ -397,42 +407,42 @@ class ProbModelBaseClass(nn.Module):
         return loss, logpx, test_elbo
 
 
-    # def get_iwae_loss(self, data):
-    #     '''
-    #     IWAE loss = log mean p(x,z) / q(z|x)
-    #     '''
-    #     assert self.reparam is True, 'Reparam must be on for iwae loss'
-    #     self.set_internals(data, self.args.S)
-    #     log_weight = self.elbo()
-    #     return compute_iwae_loss(log_weight)
+    def get_iwae_loss(self, data):
+        '''
+        IWAE loss = log mean p(x,z) / q(z|x)
+        '''
+        assert self.reparam is True, 'Reparam must be on for iwae loss'
+        self.set_internals(data, self.args.S)
+        log_weight = self.elbo()
+        return compute_iwae_loss(log_weight)
 
 
-    # def get_iwae_dreg_loss(self, data):
-    #     assert self.reparam is True, 'Reparam must be on for iwae loss'
+    def get_iwae_dreg_loss(self, data):
+        assert self.reparam is True, 'Reparam must be on for iwae loss'
 
-    #     #if self.args.stop_parameter_grad:
-    #     self.enable_stop_grads()
+        #if self.args.stop_parameter_grad:
+        self.enable_stop_grads()
 
-    #     self.set_internals(data, self.args.S)
+        self.set_internals(data, self.args.S)
 
-    #     log_weight = self.elbo()
+        log_weight = self.elbo()
 
-    #     normalized_weight = util.exponentiate_and_normalize(log_weight, dim=1)
+        normalized_weight = util.exponentiate_and_normalize(log_weight, dim=1)
 
-    #     loss = - \
-    #         torch.mean(torch.sum(torch.pow(normalized_weight,2).detach() * log_weight, 1), 0)
-    #     return loss
+        loss = - \
+            torch.mean(torch.sum(torch.pow(normalized_weight,2).detach() * log_weight, 1), 0)
+        return loss
 
 
-    # def get_elbo_loss(self, data):
-    #     assert self.reparam is True, 'Reparam must be on for elbo loss'
-    #     self.set_internals(data, self.args.S)
+    def get_elbo_loss(self, data):
+        assert self.reparam is True, 'Reparam must be on for elbo loss'
+        self.set_internals(data, self.args.S)
 
-    #     log_weight = self.elbo()
-    #     train_elbo = torch.mean(log_weight)
+        log_weight = self.elbo()
+        train_elbo = torch.mean(log_weight)
 
-    #     loss = -train_elbo
-    #     return loss
+        loss = -train_elbo
+        return loss
 
     # def get_reinforce_loss(self, data):
     #     assert self.reparam is False, 'Reparam must be off for reinforce loss'

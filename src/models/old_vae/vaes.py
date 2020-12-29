@@ -1,9 +1,9 @@
 from src.models.base import ProbModelBaseClass
-from src.models.mlp import init_mlp, init_two_prong_mlp
+from src.models.old_vae.mlp import init_mlp, init_two_prong_mlp
 import torch
 from torch.distributions import Independent
 import torch.nn as nn
-from src import util
+from src.losses import old_losses as util
 
 class VAEBaseClass(ProbModelBaseClass):
     def __init__(self, D, args):

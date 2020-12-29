@@ -1,8 +1,9 @@
-
+from torch import nn
+from src.utils.math_utils import exponentiate_and_normalize
 '''https://github.com/vmasrani/alpha_ais/blob/master/src/hmc.py
 '''
 
-class InterpolatedDensity(object):
+class InterpolatedDensity(nn.Module):
 	''' Parameters 
 	    ------------
 	    log_pi0 : function which takes (z, x) arguments
@@ -33,8 +34,16 @@ class InterpolatedDensity(object):
 		super().__init__()
 
 	def log_prob(self, z, x = None):
+
+		log_pi0 = self.log_pi0(z,x)
+		log_pi1 =  self.log_pi1(z,x)
+
 		if self.q == 1:
-			return (1-self.beta) * self.log_pi0(z, x)  + self.beta * self.log_pi1(z,x)
+			# only call 
+			self.integrand = log_pi1 - log_pi0
+			self.log_denity = log_pi_0 + self.beta * self._integrand # = (1-β) log π0 + β log π1
+			return self.log_density
+			#return (1-self.beta) * self.log_pi0(z, x)  + self.beta * self.log_pi1(z,x)
 		else:
 			raise NotImplementedError
 			return q_mixture(z, x, self.log_pi0, self.log_pi1, self.beta, self.q)
@@ -44,12 +53,10 @@ class InterpolatedDensity(object):
 		grad_outputs = torch.ones((z.shape[0],))
 
 		if multi_sample: # HMC with K samples per chain
-			init = self.log_pi0(z,x)
-			target = self.log_pi1(z,x)
-			w = target - init
-			interpolated = (1-self.beta) * init + self.beta * target
-			grad = torch.autograd.grad(interpolated, z, grad_outputs = grad_outputs)[0]
+			log_prob = self.log_prob(z, x)
+			grad = torch.autograd.grad(log_prob, z, grad_outputs = grad_outputs)[0]
 			# requires SNIS reweighting of individual energies 
+			snis_weights = exponentiate_and_normalize(self._integrand)
 			raise NotImplementedError()
 		else:
 			log_prob = self.log_prob(z, x)

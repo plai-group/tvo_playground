@@ -1,5 +1,5 @@
 from pathlib import Path
-from src.handlers.ml_helpers import detect_cuda
+from src.utils.ml_helpers import detect_cuda
 # Assertions
 
 SCHEDULES = ['log', 'linear', 'moments']
@@ -12,7 +12,7 @@ REQUIRES_REPARAM = ['elbo', 'iwae', 'tvo_reparam', 'iwae_dreg']
 ALL_LOSSES       = REQUIRES_REPARAM + ['reinforce','tvo', 'vimco','wake-wake','wake-sleep']
 
 DISCRETE_MODELS   = ['discrete_vae','pcfg']
-CONTINUOUS_MODELS = ['continuous_vae', 'bnn']
+CONTINUOUS_MODELS = ['continuous_vae', 'bnn', 'flow_vae']
 ALL_MODELS        = DISCRETE_MODELS + CONTINUOUS_MODELS
 
 BINARIZED_DATASETS = ['binarized_mnist','binarized_omniglot']
@@ -47,7 +47,7 @@ def validate_hypers(args):
 def validate_dataset_path(args):
     model_name = args.model_name
     dataset = args.dataset
-    if model_name in ['discrete_vae', 'continuous_vae']:
+    if model_name in ['discrete_vae', 'continuous_vae', 'flow_vae']:
         if dataset == 'fashion_mnist':
             data_path = args.data_dir + '/fashion_mnist.pkl'
         elif dataset == 'mnist':
