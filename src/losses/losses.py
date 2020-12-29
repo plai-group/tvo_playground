@@ -21,6 +21,7 @@ def negative_bce(x_true, x_pred, x_logvar=None, dim = -1):
     else:
         while len(x_true.shape) < len(x_pred.shape):
             x_true = x_true.unsqueeze(1)
+
         for d in range(len(x_pred.shape)):
             if x_true.shape[d] < x_pred.shape[d]:
                 x_true = torch.cat( [x_true]*int(x_pred.shape[d]/x_true.shape[d]) , dim = d)

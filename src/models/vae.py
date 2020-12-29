@@ -84,8 +84,7 @@ class FlowVAE(ProbModelBaseClass):
 		self.stop_grads = False
 
 		# can remove once tested (or summing lkds over latent_dim can be incorporated into log_probs)
-		sum_last = True
-		self.sum_last = lambda x : torch.sum(x, dim = -1) if sum_last else lambda x: x
+		self.reduce_op = lambda x: x #lambda x : torch.mean(x, dim = -1) #
 	
 
 	def get_total_log_weight(self, S):
@@ -174,7 +173,6 @@ class FlowVAE(ProbModelBaseClass):
 			self.encoder_density = self.encoder_dist.log_prob
 
 
-
 		self.sample_chain = None
 		''' e.g. AIS ( initial_density = self.encoder_dist, \
 				 	 	 target_dist = self.decoder_dist, \
@@ -225,13 +223,13 @@ class FlowVAE(ProbModelBaseClass):
 		return self.log_likelihood() + self.log_prior()
 
 	def log_likelihood(self):
-		return self.sum_last(self.observation_log_likelihood_fn(self.x, self.x_pred))
+		return self.reduce_op(self.observation_log_likelihood_fn(self.x, self.x_pred))
 
 	def log_proposal(self):
-		return self.sum_last(self.encoder_dist.log_prob(self.z))
+		return self.reduce_op(self.encoder_dist.log_prob(self.z))
 
 	def log_prior(self):
-		return self.sum_last(self.prior.log_prob(self.z))
+		return self.reduce_op(self.prior.log_prob(self.z))
 
 		# 	zeros = torch.zeros_like(z)
 		# 	return log_normal_likelihood(z, zeros, zeros, sum_dim=sum_dim)
@@ -242,7 +240,7 @@ class FlowVAE(ProbModelBaseClass):
 		if self.sample_chain is not None: 
 			# then read the elbo (i.e. integrand, log weights) off from here
 			pass
-
+		
 		return self.log_joint() - self.log_proposal()
 
 

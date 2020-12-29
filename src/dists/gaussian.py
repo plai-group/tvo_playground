@@ -34,21 +34,16 @@ class StandardNormal():
     def __init__(self, args):
         #super().__init__()
         self.args = args
-        self.zeros = torch.zeros( ( args.batch_size, args.S, args.latent_dim ) ) \
+        self.shape = ( args.batch_size, args.S, args.latent_dim ) \
                     if args.K_per_chain == 1 else \
-                    torch.zeros( ( args.K_per_chain, args.batch_size, args.S, args.latent_dim ) )
+                    ( args.K_per_chain, args.batch_size, args.S, args.latent_dim ) 
 
     def log_prob(self, z):
-        print("BEFORE SIZE NORMAL ", z.shape)
-        lnl = log_normal_likelihood(z, torch.zeros_like(z), torch.zeros_like(z), -1)
-        print("LNL SHAPE AFTER ", lnl.shape)
-        
         return log_normal_likelihood(z, torch.zeros_like(z), torch.zeros_like(z), -1)
         #Normal(torch.zeros_like(z), torch.zeros_like(z)).log_prob(z)
 
     def sample(self, S):
-        return Normal(self.zeros, self.zeros).sample(S)
-
+        return Normal(torch.zeros_like(self.shape), torch.ones_like(self.shape)).sample(S).transpose(1,0)
 
 
 class ConditionalGaussian(nn.Module):
@@ -129,9 +124,8 @@ class ConditionalGaussian(nn.Module):
         if stop_grad:
             mu = mu.detach()
             logvar = logvar.detach() 
-        print("BEFORE SIZE NORMAL ", z.shape)
+
         lnl = log_normal_likelihood(z, mu, logvar, -1)
-        print("LNL SHAPE AFTER ", lnl.shape)
         return lnl
 
     def prior_kl(self, mu, logvar):

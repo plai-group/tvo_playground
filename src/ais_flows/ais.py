@@ -73,7 +73,7 @@ class AIS(nn.Module):
 
 		self.z = [] 		# append, then torch.cat([z0.unsqueeze(-2), z1.unsqueeze(-2), z2.unsqueeze(-2)], dim =-2)
 		self.v = [] 			# yields [batch, S, K, dim]
-		self.x_pred = []	# similarly collect forward decoder passes of HMC for reuse in objectives
+		self.x_pred = []	# similarly collect forward decoder passes of HMC for reuse (needed?)
 
 		# density adjustments along the chain
 		self.proposal_densities = []
