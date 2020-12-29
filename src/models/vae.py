@@ -240,7 +240,7 @@ class FlowVAE(ProbModelBaseClass):
 		if self.sample_chain is not None: 
 			# then read the elbo (i.e. integrand, log weights) off from here
 			pass
-		
+		 
 		return self.log_joint() - self.log_proposal()
 
 
