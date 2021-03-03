@@ -50,6 +50,7 @@ class ProbModelBaseClass(nn.Module):
             'tvo_reparam': [self.get_tvo_loss, self.get_tvo_reparam_loss],       # theta optimized using tvo,  phi using tvo_reparam
             'iwae_dreg'  : [self.get_iwae_loss, self.get_iwae_dreg_loss],        # theta optimized using IWAE, phi using IWAE_reparam
             'wake-sleep' : [self.get_wake_theta_loss, self.get_sleep_phi_loss],  # theta optimized using wake, phi using sleep
+            'tvo-wake'.  : [self.get_tvo_loss, self.get_wake_phi_loss],          # theta optimized using tvo,  phi using wake
             'wake-wake'  : [self.get_wake_theta_loss, self.get_wake_phi_loss],   # theta optimized using wake, phi using wake
         }
 
