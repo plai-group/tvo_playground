@@ -90,7 +90,7 @@ pathtools==0.1.2
 patsy==0.5.1
 pexpect==4.6.0
 pickleshare==0.7.5
-Pillow==5.4.1
+Pillow==7.1.0
 pluggy==0.8.0
 prometheus-client==0.6.0
 promise==2.3
