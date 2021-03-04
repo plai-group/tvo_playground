@@ -6,7 +6,7 @@ attrs==19.1.0
 autopep8 @ file:///home/conda/feedstock_root/build_artifacts/autopep8_1591017828430/work
 awscli==1.16.57
 backcall==0.1.0
-bleach==3.1.0
+bleach==3.3.0
 botocore==1.12.47
 cachetools==4.1.0
 certifi==2020.6.20
