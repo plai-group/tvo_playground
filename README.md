@@ -12,19 +12,6 @@ To save to your wandb database, drop the `--unobserved`:
 Only strings, floats, ints, lists, and dicts should be defined in `my_config()`, everything else (numpy arrays, pickles, etc) should be instantiated in `init()`.
 
 
-## todo
- - [x] test moments
- - [x] test dreg
- - [x] test iwae
- - [x] test iwae_dreg
- - [x] test bnn
- - [x] test pcfg
- - [x] convert to wandb
- - [x] remove save datasets
- - [x] test all baseline losses
- - [x] standardize artifacts dir
- - [x] import base.py trick from bqd
-
 ### losses
 - tvo
 - tvo_reparam
@@ -49,6 +36,7 @@ Only strings, floats, ints, lists, and dicts should be defined in `my_config()`,
 - log
 - linear
 - moments
+- gp_bandits
 
 ### models
 - continuous vae
