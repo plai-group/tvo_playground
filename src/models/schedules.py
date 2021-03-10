@@ -3,6 +3,8 @@ from functools import partial
 import numpy as np
 from src.util import calc_exp
 from src.util import get_total_log_weight
+from src.gp import gp_bandit
+import src.ml_helpers as mlh
 
 def get_partition_scheduler(args):
     """
@@ -18,14 +20,16 @@ def get_partition_scheduler(args):
         * should handle 0/1 endpoint insertion internally
         * may take args.K - 1 partitions as a result (0 is given)
     """
+    schedules = {
+        'log': beta_id,
+        'linear': beta_id,
+        'moments': moments,
+        'gp_bandits': gp_bandit_schedule,
+    }
 
-    schedule = args.schedule
-    if schedule in ['log', 'linear']:
-        return beta_id
-    elif schedule == 'moments':
-        return moments
-    else:
-        raise ValueError
+
+
+    return schedules[args.schedule]
 
 def moments(model, args=None, **kwargs):
     args  = model.args if args is None else args
@@ -96,3 +100,13 @@ def beta_id(model, args = None, **kwargs):
     dummy beta update for static / unspecified partition_types
     """
     return args.partition
+
+
+def gp_bandit_schedule(model, args):
+    points = gp_bandit.calculate_BO_points(model, args)
+    K=len(points)
+    points=mlh.tensor(points,args)
+    print("==================================")
+    print("K={} points={}".format(K,points))
+    print("==================================")
+    return points

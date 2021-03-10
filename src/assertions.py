@@ -1,8 +1,9 @@
 from pathlib import Path
+import numpy as np
 from src.ml_helpers import detect_cuda
 # Assertions
 
-SCHEDULES = ['log', 'linear', 'moments']
+SCHEDULES = ['log', 'linear', 'moments','gp_bandits']
 PARTITONS = ['left','right','trapz']
 
 TVO_LOSSES       = ['tvo','tvo_reparam']
@@ -76,6 +77,13 @@ def validate_args(args):
 
     # check data path
     args.data_path = validate_dataset_path(args)
+
+    # add bandit memory args necessary
+    if args.schedule == 'gp_bandits':
+        args.logtvopx_all = [] # for storage
+        args.average_y = []
+        args.X_ori = np.empty((0, args.K + 1), float)
+        args.Y_ori = []
 
     # check artifact_dir
     Path(args.artifact_dir).mkdir(exist_ok=True)

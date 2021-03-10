@@ -842,6 +842,13 @@ def is_schedule_update_time(epoch, args):
     if (epoch % args.schedule_update_frequency) == 0:
         return True
 
+    # update bandit freq
+    if ((args.schedule == 'gp_bandits') and
+        (len(args.Y_ori) % args.increment_update_frequency == 0) and
+        (len(args.Y_ori) > 1)):
+        args.schedule_update_frequency = args.schedule_update_frequency + 1
+        print("args.schedule_update_frequency = ", args.schedule_update_frequency)
+
     # Else
     return False
 

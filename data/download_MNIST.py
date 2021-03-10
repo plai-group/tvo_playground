@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 __author__ = "Xinqiang Ding <xqding@umich.edu>"
 
 import numpy as np
@@ -5,6 +6,14 @@ import urllib3
 import gzip
 import subprocess
 import pickle
+
+# --- note ----
+# if you get a weird error 'OSError: Not a gzipped file (b'<!')'
+# try running this script on another machine, doesn't seem to work on some linux dists
+# https://groups.google.com/a/tensorflow.org/g/discuss/c/Sg7TW-o2KZY
+# --- note ----
+
+
 
 ## download train labels
 print("Downloading train-labels-idx1-ubyte ......")

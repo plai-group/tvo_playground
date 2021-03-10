@@ -67,10 +67,12 @@ def my_config():
     per_sample = False # Update schedule for each sample
     per_batch = False # schedule update per batch
 
+
     # Recording
     record = False
     verbose = False
     dataset = 'mnist'
+
 
     # Training
     seed            = 1
@@ -93,6 +95,18 @@ def my_config():
 
     phi_tag = 'encoder'
     theta_tag = 'decoder'
+
+
+    # bandits
+    # hypers
+    # if it is terminated, this indicates how many epochs have been run from the last bandit
+    drip_threshold = -0.05 # to terminate a chosen beta for another one if the logpx drops more than this threshold
+    len_terminated_epoch = 0 # if it is terminated, this indicates how many epochs have been run from the last bandit
+    burn_in = 20  # number of epochs to wait before scheduling begins, useful to set low for debugging
+    schedule_update_frequency = 6  # if 0, initalize once and never update
+    bandit_beta_min = 0.05  # -1.09
+    bandit_beta_max = 0.95  # -1.09
+    truncation_threshold = 30 * K
 
 
     if model_name == 'discrete_vae':

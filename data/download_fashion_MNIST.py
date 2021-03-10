@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 __author__ = "Xinqiang Ding <xqding@umich.edu>"
 
 import numpy as np
@@ -5,7 +6,6 @@ import urllib3
 import gzip
 import subprocess
 import pickle
-
 
 ## download train labels
 print("Downloading train-labels-idx1-ubyte ......")
