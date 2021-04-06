@@ -91,7 +91,7 @@ tqdm==4.59.0
 traitlets==4.3.3
 typed-ast @ file:///tmp/build/80754af9/typed-ast_1610484534478/work
 typing-extensions==3.7.4.3
-urllib3==1.26.3
+urllib3==1.26.4
 wandb==0.10.22
 wcwidth==0.2.5
 Werkzeug==1.0.1
