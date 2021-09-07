@@ -3,11 +3,11 @@ Clean slate to begin research on the thermodynamic variational objective. Not ev
 
 It uses [sacred](https://sacred.readthedocs.io/en/stable/) for its command line interface and [wandb](https://www.wandb.com/) for experiment tracking. All hyperparameters are defined in `my_config()` and are available on the commandline via:
 
-`python main.py with learning_task='continuous_vae' loss='tvo' lr=0.01 --unobserved`
+`python main.py with model_name='continuous_vae' loss='tvo' lr=0.01 --unobserved`
 
 To save to your wandb database, drop the `--unobserved`:
 
-`python main.py with learning_task='continuous_vae' loss='tvo' lr=0.01`
+`python main.py with model_name='continuous_vae' loss='tvo' lr=0.01`
 
 Only strings, floats, ints, lists, and dicts should be defined in `my_config()`, everything else (numpy arrays, pickles, etc) should be instantiated in `init()`.
 
