@@ -2,10 +2,8 @@ pandas
 joblib
 pyjanitor
 tqdm
-torch
 matplotlib
 seaborn
-numba
 sacred
 wandb
 torch
