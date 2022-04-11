@@ -104,6 +104,8 @@ def my_config():
     len_terminated_epoch = 0 # if it is terminated, this indicates how many epochs have been run from the last bandit
     burn_in = 20  # number of epochs to wait before scheduling begins, useful to set low for debugging
     schedule_update_frequency = 6  # if 0, initalize once and never update
+    increment_update_frequency=10
+
     bandit_beta_min = 0.05  # -1.09
     bandit_beta_max = 0.95  # -1.09
     truncation_threshold = 30 * K
