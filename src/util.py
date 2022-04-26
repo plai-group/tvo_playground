@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from src.ml_helpers import AverageMeter, get_grads, tensor, lognormexp, exponentiate_and_normalize, seed_all
 from torch.distributions.multinomial import Multinomial
+import src.ml_helpers as mlh
 
 
 def range_except(end, i):
@@ -88,6 +89,29 @@ def _get_multiplier(partition, integration):
                 multiplier[..., -1] = 0
 
     return multiplier
+
+
+def compute_tvo_log_evidence(log_weight, args):
+
+    # this is special partition for tvo_log_evidence
+
+    partition = mlh.tensor(10**args.partition_tvo_evidence, args)
+    # this is the integration used for computing tvo_log_evidence only
+    # should be trapz
+    integration = args.integration_tvo_evidence
+
+    log_weight = log_weight.unsqueeze(-1)
+
+    heated_log_weight = log_weight * partition
+    heated_normalized_weight = exponentiate_and_normalize(heated_log_weight, dim=1)
+    Epi_beta = torch.sum(heated_normalized_weight * log_weight, dim=1)
+
+    multiplier = _get_multiplier(partition, integration)
+
+    tvo_logpx = torch.sum(multiplier * Epi_beta, dim=1)
+
+    return tvo_logpx
+
 
 
 def get_tvo_components(log_weight, log_p, log_q, args, heated_normalized_weight=None):

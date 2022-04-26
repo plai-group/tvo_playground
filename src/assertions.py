@@ -80,6 +80,7 @@ def validate_args(args):
 
     # add bandit memory args necessary
     if args.schedule == 'gp_bandits':
+        args.betas_all = np.empty((0, args.K+1), float)
         args.logtvopx_all = [] # for storage
         args.average_y = []
         args.X_ori = np.empty((0, args.K + 1), float)
@@ -92,3 +93,4 @@ def validate_args(args):
     args = detect_cuda(args)
 
     return args
+

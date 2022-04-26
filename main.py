@@ -48,6 +48,7 @@ def my_config():
     hidden_dim = 200  # Hidden dimension of middle NN layers in vae
     latent_dim = 50  # Dimension of latent variable z
     integration = 'left'
+
     cuda = True
     num_stochastic_layers = 1
     num_deterministic_layers = 2
@@ -109,6 +110,10 @@ def my_config():
     bandit_beta_min = 0.05  # -1.09
     bandit_beta_max = 0.95  # -1.09
     truncation_threshold = 30 * K
+
+    # this is used to estimate get_tvo_log_evidence only
+    partition_tvo_evidence = np.linspace(-9, 0, 50)
+    integration_tvo_evidence = 'trapz'
 
 
     if model_name == 'discrete_vae':
@@ -182,11 +187,7 @@ def log_scalar(**kwargs):
 
 def train(model, args):
     for epoch in range(args.epochs):
-        if mlh.is_schedule_update_time(epoch, args):
-            args.partition = args.partition_scheduler(model, args)
-
-        train_logpx, train_elbo = model.step_epoch(args.train_data_loader, step=epoch)
-
+        train_logpx, train_elbo, train_tvo_log_evidence = model.step_epoch(args.train_data_loader, step=epoch)
         log_scalar(train_elbo=train_elbo, train_logpx=train_logpx, step=epoch)
 
         if mlh.is_gradient_time(epoch, args):
@@ -197,6 +198,14 @@ def train(model, args):
         if mlh.is_test_time(epoch, args):
             test_logpx, test_kl = model.test(args.test_data_loader, step=epoch)
             log_scalar(test_logpx=test_logpx, test_kl=test_kl, step=epoch)
+
+        if args.schedule == "gp_bandits":
+            args.betas_all = np.vstack((args.betas_all, args.partition.cpu().numpy()))
+            args.logtvopx_all.append(train_tvo_log_evidence)
+
+        if mlh.is_schedule_update_time(epoch, args):
+            args.partition = args.partition_scheduler(model, args)
+
 
         # ------ end of training loop ---------
 

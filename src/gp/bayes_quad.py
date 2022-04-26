@@ -113,13 +113,12 @@ def calculate_BO_points(model,args):
 
 
     # perform GP bandit
-    if args.schedule=="gp_bandit":
+    if args.schedule=="gp_bandits":
         myBO=BayesOpt(func=None,SearchSpace=SearchSpace)
     elif args.schedule=="tvgp" or args.schedule=="gp": # TV but not permutation invariant
         myBO=BayesOpt(func=None,SearchSpace=SearchSpace,GPtype="vanillaGP")
     else:
         print("please change ",args.schedule)
-
 
     myBO.init_with_data(X,Y)
 

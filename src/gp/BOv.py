@@ -273,7 +273,7 @@ class BayesOpt:
             # pick the one with the best value and start L-BFGS-B from this point
             x_init_max=x_tries[np.argmax(y_tries)]
 
-            res = minimize(lambda x: -ac(x.reshape(1, -1)),x_init_max.reshape(1, -1),
+            res = minimize(lambda x: -float(ac(x.reshape(1, -1))),x_init_max.reshape(1, -1),
                    bounds=self.scaleSearchSpace,method="L-BFGS-B",options=myopts)#L-BFGS-B
 
             val=ac(res.x)

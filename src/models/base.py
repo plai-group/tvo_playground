@@ -6,7 +6,7 @@ import numpy as np
 from tqdm import tqdm
 import torch
 
-from src.util import compute_tvo_loss, compute_wake_theta_loss, compute_wake_phi_loss, compute_vimco_loss, compute_tvo_reparam_loss, compute_iwae_loss
+from src.util import compute_tvo_log_evidence, compute_tvo_loss, compute_wake_theta_loss, compute_wake_phi_loss, compute_vimco_loss, compute_tvo_reparam_loss, compute_iwae_loss
 from src import assertions
 from src import util
 
@@ -186,8 +186,10 @@ class ProbModelBaseClass(nn.Module):
         # wrap for progress bar if verbose flag is on
         data_loader = tqdm(data_loader) if self.args.verbose else data_loader
 
-        train_logpx = 0
-        train_elbo = 0
+        train_logpx            = 0
+        train_elbo             = 0
+        train_tvo_log_evidence = 0
+
         for idx, data in enumerate(data_loader):
             # this loop handles the single and double objective cases
             # add new objectives into the self.losses dictionary
@@ -198,18 +200,20 @@ class ProbModelBaseClass(nn.Module):
                 opt.step()
 
             # these are computed used a fixed valid_S so they are comparable across different sample sizes
-            logpx, elbo = self.get_test_metrics(data, self.args.valid_S)
+            logpx, elbo, tvo_log_evidence = self.get_test_metrics(data, self.args.valid_S)
 
             # only does something if function is filled in by subclass
             self.record()
 
             train_logpx += logpx.item()
             train_elbo += elbo.item()
+            train_tvo_log_evidence += tvo_log_evidence.item()
 
         train_logpx = train_logpx / len(data_loader)
         train_elbo = train_elbo / len(data_loader)
+        train_tvo_log_evidence = train_tvo_log_evidence / len(data_loader)
 
-        return train_logpx, train_elbo
+        return train_logpx, train_elbo, train_tvo_log_evidence
 
     # ============================================
     # ---------- Main test function --------------
@@ -264,7 +268,16 @@ class ProbModelBaseClass(nn.Module):
             log_weight = self.elbo()
             logpx = self.get_test_log_evidence(data, S, log_weight=log_weight)
             test_elbo = self.get_test_elbo(data, S, log_weight=log_weight)
-        return logpx, test_elbo
+            tvo_log_evidence = self.get_tvo_log_evidence(data, S, log_weight=log_weight)
+        return logpx, test_elbo, tvo_log_evidence
+
+    def get_tvo_log_evidence(self, data, S, log_weight=None):
+        with torch.no_grad():
+            if log_weight is None:
+                self.set_internals(data, S)
+                log_weight = self.elbo()
+            tvo_log_evidence = compute_tvo_log_evidence(log_weight, self.args)
+        return torch.mean(tvo_log_evidence)
 
     def get_test_log_evidence(self, data, S, log_weight=None):
         with torch.no_grad():

@@ -101,7 +101,6 @@ def calculate_BO_points(model,args):
     else:   # time varying
         X,Y=extract_X_Y_from_args(SearchSpace,args)
 
-
     if Y is None:
         return X
 
@@ -117,7 +116,7 @@ def calculate_BO_points(model,args):
     Y=np.vstack((Y,np.asarray(worse_score)))
     Y=np.vstack((Y,np.asarray(worse_score)))
 
-    if args.schedule=="gp_bandit":
+    if args.schedule=="gp_bandits":
         myBO=BayesOpt(func=None,SearchSpace=SearchSpace)
     elif args.schedule=="gptv" or args.schedule=="gp": # TV but not permutation invariant
         myBO=BayesOpt(func=None,SearchSpace=SearchSpace,GPtype="vanillaGP")
