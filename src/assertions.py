@@ -76,7 +76,7 @@ def validate_args(args):
     validate_hypers(args)
 
     # check data path
-    args.data_path = validate_dataset_path(args)
+    args.data_path = Path(args.home_dir) / validate_dataset_path(args)
 
     # add bandit memory args necessary
     if args.schedule == 'gp_bandits':

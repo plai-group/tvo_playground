@@ -19,7 +19,7 @@ from src.models.model_handler import get_model
 # Use sacred for command line interface + hyperparams
 # Use wandb for experiment tracking
 ex = Experiment()
-WANDB_PROJECT_NAME = 'SET_PROJECT_NAME'
+WANDB_PROJECT_NAME = 'tvo_playground'
 if '--unobserved' in sys.argv:
     os.environ['WANDB_MODE'] = 'dryrun'
 
@@ -42,6 +42,7 @@ def my_config():
     model_name = 'continuous_vae'
     artifact_dir = './artifacts'
     data_dir = './data'
+    home_dir = '.'
 
     # Model
     loss = 'elbo'
