@@ -32,6 +32,7 @@ def get_partition_scheduler(args):
     return schedules[args.schedule]
 
 def moments(model, args=None, **kwargs):
+    print('running binary search')
     args  = model.args if args is None else args
     start = 0
     stop  = 1
@@ -70,8 +71,10 @@ def moments(model, args=None, **kwargs):
         beta_result = torch.cat([b.unsqueeze(1) for b in beta_result], axis=1).unsqueeze(1)
         beta_result, _ = torch.sort(beta_result, -1)
     else:
-        beta_result = torch.cuda.FloatTensor(beta_result)
-
+        if args.device.type == 'cpu':
+            beta_result = torch.FloatTensor(beta_result)
+        else:
+            beta_result = torch.cuda.FloatTensor(beta_result)
     return beta_result
 
 def _moment_binary_search(target, log_iw, start=0, stop= 1, threshold = 0.1, recursion = 0, per_sample = False, min_beta = 0.001): #recursion = 0,

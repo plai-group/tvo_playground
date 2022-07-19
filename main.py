@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+from src.ml_helpers import BestMeter
 import torch
 import wandb
 from sacred import Experiment
@@ -19,7 +20,7 @@ from src.models.model_handler import get_model
 # Use sacred for command line interface + hyperparams
 # Use wandb for experiment tracking
 ex = Experiment()
-WANDB_PROJECT_NAME = 'tvo_playground'
+WANDB_PROJECT_NAME = 'tvo_pcfg'
 if '--unobserved' in sys.argv:
     os.environ['WANDB_MODE'] = 'dryrun'
 
@@ -65,7 +66,6 @@ def my_config():
 
     # Scheduling
     schedule = 'log'
-    schedule_update_frequency = 1  # if 0, initalize once and never update
     per_sample = False # Update schedule for each sample
     per_batch = False # schedule update per batch
 
@@ -182,17 +182,52 @@ def log_scalar(**kwargs):
     assert "step" in kwargs, 'Step must be included in kwargs'
     step = kwargs.pop('step')
     wandb.log(kwargs)
+
+    if "_timestamp" in kwargs:
+        _timestamp = kwargs.pop('_timestamp')
+    if '_runtime' in kwargs:
+        _runtime = kwargs.pop('_runtime')
+
     loss_string = " ".join(("{}: {:.4f}".format(*i) for i in kwargs.items()))
     print(f"Epoch: {step} - {loss_string}")
 
 
+@ex.capture
+def save_checkpoint(model, epoch, train_elbo, train_logpx, opt, best=False, _config=None):
+    if best:
+        path = Path(wandb.run.dir) /  'model_best.pt'
+    else:
+        path = Path(wandb.run.dir) /  'model_epoch_{:04}.pt'.format(epoch)
+
+    print("Saving checkpoint: {}".format(path))
+    if len(opt) == 2:
+        torch.save({'epoch': epoch,
+                    'model': model.state_dict(),
+                    'optimizer_phi': opt[0].state_dict(),
+                    'optimizer_theta': opt[1].state_dict(),
+                    'train_elbo': train_elbo,
+                    'train_logpx': train_logpx,
+                    'config': dict(_config)}, path)
+    else:
+        torch.save({'epoch': epoch,
+                    'model': model.state_dict(),
+                    'optimizer': opt[0].state_dict(),
+                    'train_elbo': train_elbo,
+                    'train_logpx': train_logpx,
+                    'config': dict(_config)}, path)
+
+    wandb.save(str(path))
+
+
 def train(model, args):
+    is_best = BestMeter(verbose=True)
+
     for epoch in range(args.epochs):
         train_logpx, train_elbo, train_tvo_log_evidence = model.step_epoch(args.train_data_loader, step=epoch)
         log_scalar(train_elbo=train_elbo, train_logpx=train_logpx, step=epoch)
 
+        # Save grads
         if mlh.is_gradient_time(epoch, args):
-            # Save grads
             grad_variance = util.calculate_grad_variance(model, args)
             log_scalar(grad_variance=grad_variance, step=epoch)
 
@@ -207,7 +242,12 @@ def train(model, args):
         if mlh.is_schedule_update_time(epoch, args):
             args.partition = args.partition_scheduler(model, args)
 
+        if args.model_name == 'pcfg':
+            metrics = model.evaluate_pq(args.train_data_loader, epoch)
+            log_scalar(**metrics, step=epoch)
 
+        if is_best.step(train_logpx):
+            save_checkpoint(model, epoch, train_elbo, train_logpx, model.optimizer, best=True)
         # ------ end of training loop ---------
 
     if args.train_only:
@@ -219,6 +259,8 @@ def train(model, args):
         "train_logpx": train_logpx,
         "train_elbo": train_elbo
     }
+
+    save_checkpoint(model, epoch, train_elbo, train_logpx, model.optimizer)
 
     return results, model
 

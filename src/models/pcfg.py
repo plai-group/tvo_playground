@@ -362,6 +362,7 @@ class InferenceNetwork(nn.Module):
         elif depth > self.max_depth:
             return symbol
         else:
+            # import ipdb; ipdb.set_trace()
             sample_address_embedding = util.get_sample_address_embedding(
                 symbol, self.grammar['non_terminals'])
             inference_gru_output = self.get_inference_gru_output(
@@ -600,7 +601,6 @@ class PCFG(ProbModelBaseClass):
         log_q = torch.zeros(len(self.x), S)
         log_prior = torch.zeros(len(self.x), S)
         log_likelihood = torch.zeros(len(self.x), S)
-
         # this is painful, batching difficult b/c of different length trees.
         # therefore iterate once and save log_prior, log_guide, log_likelihood
         # manually
@@ -637,17 +637,6 @@ class PCFG(ProbModelBaseClass):
     def log_likelihood(self):
         return self._log_likelihood
 
-    def train(self, data_loader, step=None):
-        assert False, 'needs to be updated for new baseclass structure'
-        if self.dual_objective:
-            train_logpx, train_elbo = self.train_dual_objectives(data_loader)
-        else:
-            train_logpx, train_elbo = self.train_single_objective(data_loader)
-
-        self.evaluate_pq(data_loader, step)
-
-        return train_logpx, train_elbo
-
     def evaluate_pq(self, data_loader, epoch):
         true_generative_model = data_loader.dataset.true_generative_model
 
@@ -657,12 +646,9 @@ class PCFG(ProbModelBaseClass):
             "q_error_to_model":util.get_q_error(self.generative_model, self.inference_network)
             }
 
-        self.args.wandb.log(metrics)
+        return metrics
 
-        loss_string = " ".join(("{}: {:.4f}".format(*i) for i in metrics.items()))
-        print(f"Epoch: {epoch} - {loss_string}")
-
-    def get_sleep_phi_loss(self):
+    def get_sleep_phi_loss(self, data):
         """Returns:
             loss: scalar that we call .backward() on and step the optimizer.
         """

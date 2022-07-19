@@ -20,7 +20,7 @@ import pandas as pd
 import torch
 import torch.distributed as dist
 from joblib import Parallel, delayed
-from sklearn import metrics
+# from sklearn import metrics
 from torch._six import inf
 
 PRUNE_COLUMNS = [
@@ -678,10 +678,10 @@ def hits_and_misses(y_hat, y_testing):
     fn = sum(y_testing - y_hat > 0)
     return tp, tn, fp, fn
 
-def get_auc(roc):
-    prec = roc['prec'].fillna(1)
-    recall = roc['recall']
-    return metrics.auc(recall, prec)
+# def get_auc(roc):
+#     prec = roc['prec'].fillna(1)
+#     recall = roc['recall']
+#     return metrics.auc(recall, prec)
 
 def classification_metrics(tp, tn, fp, fn):
     precision   = tp / (tp + fp)
@@ -823,8 +823,11 @@ def detect_cuda(args):
 
 def is_schedule_update_time(epoch, args):
     # No scheduling
-    if args.loss != 'tvo':
+    if args.loss not in ['tvo','tvo_reparam', 'tvo-sleep','tvo-wake']:
         return False
+
+    # if args.loss != 'tvo':
+    #     return False
 
     # First epoch, initalize
     if epoch == 0:

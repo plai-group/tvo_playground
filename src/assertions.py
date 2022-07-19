@@ -6,11 +6,11 @@ from src.ml_helpers import detect_cuda
 SCHEDULES = ['log', 'linear', 'moments','gp_bandits']
 PARTITONS = ['left','right','trapz']
 
-TVO_LOSSES       = ['tvo','tvo_reparam']
+TVO_LOSSES       = ['tvo','tvo_reparam', 'tvo-sleep','tvo-wake']
 DUAL_LOSSES      = ['wake-wake', 'wake-sleep', 'tvo_reparam', 'iwae_dreg']
-DISCRETE_LOSSES  = ['tvo','tvo_reparam', 'wake-wake', 'wake-sleep', 'reinforce', 'vimco']
+DISCRETE_LOSSES  = ['tvo','tvo_reparam', 'wake-wake', 'wake-sleep', 'reinforce', 'vimco','tvo-sleep','tvo-wake']
 REQUIRES_REPARAM = ['elbo', 'iwae', 'tvo_reparam', 'iwae_dreg']
-ALL_LOSSES       = REQUIRES_REPARAM + ['reinforce','tvo', 'vimco','wake-wake','wake-sleep']
+ALL_LOSSES       = REQUIRES_REPARAM + TVO_LOSSES + DUAL_LOSSES + DISCRETE_LOSSES + REQUIRES_REPARAM
 
 DISCRETE_MODELS   = ['discrete_vae','pcfg']
 CONTINUOUS_MODELS = ['continuous_vae', 'bnn']

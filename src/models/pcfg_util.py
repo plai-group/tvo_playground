@@ -12,7 +12,7 @@ import nltk
 import matplotlib
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
-import seaborn as sns
+# import seaborn as sns
 
 
 def lognormexp(values, dim=0):
@@ -571,25 +571,25 @@ def rgba2gray(rgba):
 
 
 # This function needs to be optimized
-def xsys2gray(xs, ys):
-    """Args:
-        xs: tensor of shape [100]
-        ys: tensor of shape [100]
+# def xsys2gray(xs, ys):
+#     """Args:
+#         xs: tensor of shape [100]
+#         ys: tensor of shape [100]
 
-    Returns: grayscale image repr. by tensor of shape
-        [100, 100] where 1 is white and 0 is black"""
+#     Returns: grayscale image repr. by tensor of shape
+#         [100, 100] where 1 is white and 0 is black"""
 
-    fig, ax = plt.subplots(1, 1, figsize=(1, 1), dpi=100)
-    ax.plot(xs.numpy(), ys.numpy(), color='black')
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_ylim(-100, 100)
-    ax.set_xlim(-10, 10)
-    sns.despine(ax=ax, left=True, bottom=True)
-    fig.tight_layout(pad=0)
+#     fig, ax = plt.subplots(1, 1, figsize=(1, 1), dpi=100)
+#     ax.plot(xs.numpy(), ys.numpy(), color='black')
+#     ax.set_xticks([])
+#     ax.set_yticks([])
+#     ax.set_ylim(-100, 100)
+#     ax.set_xlim(-10, 10)
+#     sns.despine(ax=ax, left=True, bottom=True)
+#     fig.tight_layout(pad=0)
 
-    return torch.tensor(rgba2gray(fig2rgba(fig)) / 255.0,
-                        dtype=torch.float)
+#     return torch.tensor(rgba2gray(fig2rgba(fig)) / 255.0,
+#                         dtype=torch.float)
 
 
 def get_most_recent_model_folder_args_match(**kwargs):
