@@ -1,5 +1,5 @@
 # tvo_playground
-Clean slate to begin research on the thermodynamic variational objective. Not every permutation of model/loss/dataset has been tested, so expect a few bumps. `base.py` is where most of the training logic lives, and all new models should extend it to get access to the various losses.
+Clean slate to begin research on the thermodynamic variational objective. The heart of the code is `src/models/base.py`. This is where most of the training logic lives, and all new models should extend it to get access to the various losses. The outer training loop which calls all the code is `main.py`. 
 
 It uses [sacred](https://sacred.readthedocs.io/en/stable/) for its command line interface and [wandb](https://www.wandb.com/) for experiment tracking. All hyperparameters are defined in `my_config()` and are available on the commandline via:
 
